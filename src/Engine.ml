@@ -1,0 +1,729 @@
+(**************************************************************************)
+(*                                                                        *)
+(*  Menhir                                                                *)
+(*                                                                        *)
+(*  François Pottier, INRIA Paris-Rocquencourt                            *)
+(*  Yann Régis-Gianas, PPS, Université Paris Diderot                      *)
+(*                                                                        *)
+(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
+(*  et en Automatique. All rights reserved. This file is distributed      *)
+(*  under the terms of the GNU Library General Public License, with the   *)
+(*  special exception on linking described in file LICENSE.               *)
+(*                                                                        *)
+(**************************************************************************)
+
+open EngineTypes
+
+(* The LR parsing engine. *)
+
+(* This module is used:
+
+   - at compile time, if so requested by the user, via the --interpret options;
+   - at run time, in the table-based back-end. *)
+
+module Make (T : TABLE) = struct
+
+  (* This propagates type and exception definitions. *)
+
+  include T
+
+  type env =
+      (state, semantic_value, token) EngineTypes.env
+
+  (* --------------------------------------------------------------------------- *)
+
+  (* The type [checkpoint] represents an intermediate or final result of the
+     parser. See [EngineTypes]. *)
+
+  (* The type [checkpoint] is presented to the user as a private type (see
+     [IncrementalEngine]). This prevents the user from manufacturing checkpoints
+     (i.e., continuations) that do not make sense. (Such continuations could
+     potentially violate the LR invariant and lead to crashes.) *)
+
+  type 'a checkpoint =
+    | InputNeeded of env
+    | Shifting of env * env * bool
+    | AboutToReduce of env * production
+    | HandlingError of env
+    | Accepted of 'a
+    | Rejected
+
+  (* --------------------------------------------------------------------------- *)
+
+  (* In the code-based back-end, the [run] function is sometimes responsible
+     for pushing a new cell on the stack. This is motivated by code sharing
+     concerns. In this interpreter, there is no such concern; [run]'s caller
+     is always responsible for updating the stack. *)
+
+  (* In the code-based back-end, there is a [run] function for each state
+     [s]. This function can behave in two slightly different ways, depending
+     on when it is invoked, or (equivalently) depending on [s].
+
+     If [run] is invoked after shifting a terminal symbol (or, equivalently,
+     if [s] has a terminal incoming symbol), then [run] discards a token,
+     unless [s] has a default reduction on [#]. (Indeed, in that case,
+     requesting the next token might drive the lexer off the end of the input
+     stream.)
+
+     If, on the other hand, [run] is invoked after performing a goto transition,
+     or invoked directly by an entry point, then there is nothing to discard.
+
+     These two cases are reflected in [CodeBackend.gettoken].
+
+     Here, the code is structured in a slightly different way. It is up to the
+     caller of [run] to indicate whether to discard a token, via the parameter
+     [please_discard]. This flag is set when [s] is being entered by shifting
+     a terminal symbol and [s] does not have a default reduction on [#]. *)
+
+  (* The following recursive group of functions are tail recursive, produce a
+     checkpoint of type [semantic_value checkpoint], and cannot raise an
+     exception. A semantic action can raise [Error], but this exception is
+     immediately caught within [reduce]. *)
+
+  let rec run env please_discard : semantic_value checkpoint =
+
+    (* Log the fact that we just entered this state. *)
+    
+    if log then
+      Log.state env.current;
+
+    (* If [please_discard] is set, we discard the current lookahead token and
+       fetch the next one. In order to request a token from the user, we
+       return an [InputNeeded] continuation, which, when invoked by the user,
+       will take us to [discard]. If [please_discard] is not set, we skip this
+       step and jump directly to [check_for_default_reduction]. *)
+
+    if please_discard then
+      InputNeeded env
+    else
+      check_for_default_reduction env
+
+  (* [discard env triple] stores [triple] into [env], overwriting the previous
+     token. It is invoked by [offer], which itself is invoked by the user in
+     response to an [InputNeeded] checkpoint. *)
+
+  and discard env triple =
+    if log then begin
+      let (token, startp, endp) = triple in
+      Log.lookahead_token (T.token2terminal token) startp endp
+    end;
+    let env = { env with error = false; triple } in
+    check_for_default_reduction env
+
+  and check_for_default_reduction env =
+
+    (* Examine what situation we are in. This case analysis is analogous to
+       that performed in [CodeBackend.gettoken], in the sub-case where we do
+       not have a terminal incoming symbol. *)
+
+    T.default_reduction
+      env.current
+      announce_reduce       (* there is a default reduction; perform it *)
+      check_for_error_token (* there is none; continue below *)
+      env
+
+  and check_for_error_token env =
+
+    (* There is no default reduction. Consult the current lookahead token
+       so as to determine which action should be taken. *)
+
+    (* Peeking at the first input token, without taking it off the input
+       stream, is done by reading [env.triple]. We are careful to first
+       check [env.error]. *)
+
+    (* Note that, if [please_discard] was true, then we have just called
+       [discard], so the lookahead token cannot be [error]. *)
+
+    (* Returning [HandlingError env] is equivalent to calling [error env]
+       directly, except it allows the user to regain control. *)
+
+    if env.error then begin
+      if log then
+        Log.resuming_error_handling();
+      HandlingError env
+    end
+    else
+      let (token, _, _) = env.triple in
+
+      (* We consult the two-dimensional action table, indexed by the
+         current state and the current lookahead token, in order to
+         determine which action should be taken. *)
+
+      T.action
+        env.current                    (* determines a row *)
+        (T.token2terminal token)       (* determines a column *)
+        (T.token2value token)
+        shift                          (* shift continuation *)
+        announce_reduce                (* reduce continuation *)
+        initiate                       (* failure continuation *)
+        env
+
+  (* --------------------------------------------------------------------------- *)
+
+  (* This function takes care of shift transitions along a terminal symbol.
+     (Goto transitions are taken care of within [reduce] below.) The symbol
+     can be either an actual token or the [error] pseudo-token. *)
+
+  (* Here, the lookahead token CAN be [error]. *)
+
+  and shift env
+      (please_discard : bool)
+      (terminal : terminal)
+      (value : semantic_value)
+      (s' : state) =
+
+    (* Log the transition. *)
+
+    if log then
+      Log.shift terminal s';
+
+    (* Push a new cell onto the stack, containing the identity of the
+       state that we are leaving. *)
+
+    let (_, startp, endp) = env.triple in
+    let stack = {
+      state = env.current;
+      semv = value;
+      startp;
+      endp;
+      next = env.stack;
+    } in
+
+    (* Switch to state [s']. *)
+
+    let new_env = { env with stack; current = s' } in
+
+    (* Expose the transition to the user. (In principle, we have a choice
+       between exposing the transition before we take it, after we take
+       it, or at some point in between. This affects the number and type
+       of the parameters carried by [Shifting]. Here, we choose to expose
+       the transition after we take it; this allows [Shifting] to carry
+       only three parameters, whose meaning is simple.) *)
+
+    Shifting (env, new_env, please_discard)
+
+  (* --------------------------------------------------------------------------- *)
+
+  (* The function [announce_reduce] stops the parser and returns a checkpoint
+     which allows the parser to be resumed by calling [reduce]. *)
+
+  (* Only ordinary productions are exposed to the user. Start productions
+     are not exposed to the user. Reducing a start production simply leads
+     to the successful termination of the parser. *)
+
+  and announce_reduce env (prod : production) =
+    if T.is_start prod then
+      accept env prod
+    else
+      AboutToReduce (env, prod)
+
+  (* The function [reduce] takes care of reductions. It is invoked by
+     [resume] after an [AboutToReduce] event has been produced. *)
+
+  (* Here, the lookahead token CAN be [error]. *)
+
+  (* The production [prod] CANNOT be a start production. *)
+
+  and reduce env (prod : production) =
+
+    (* Log a reduction event. *)
+
+    if log then
+      Log.reduce_or_accept prod;
+
+    (* Invoke the semantic action. The semantic action is responsible for
+       truncating the stack and pushing a new cell onto the stack, which
+       contains a new semantic value. It can raise [Error]. *)
+
+    (* If the semantic action terminates normally, it returns a new stack,
+       which becomes the current stack. *)
+
+    (* If the semantic action raises [Error], we catch it and initiate error
+       handling. *)
+
+    (* This [match/with/exception] construct requires OCaml 4.02. *)
+
+    match T.semantic_action prod env with
+    | stack ->
+
+        (* By our convention, the semantic action has produced an updated
+           stack. The state now found in the top stack cell is the return
+           state. *)
+
+        (* Perform a goto transition. The target state is determined
+           by consulting the goto table at the return state and at
+           production [prod]. *)
+
+        let current = T.goto stack.state prod in
+        let env = { env with stack; current } in
+        run env false
+
+    | exception Error ->
+        initiate env
+
+  and accept env prod =
+    (* Log an accept event. *)
+    if log then
+      Log.reduce_or_accept prod;
+    (* Extract the semantic value out of the stack. *)
+    let v = env.stack.semv in
+    (* Finish. *)
+    Accepted v
+
+  (* --------------------------------------------------------------------------- *)
+
+  (* The following functions deal with errors. *)
+
+  (* [initiate] initiates or resumes error handling. *)
+
+  (* Here, the lookahead token CAN be [error]. *)
+
+  and initiate env =
+    if log then
+      Log.initiating_error_handling();
+    let env = { env with error = true } in
+    HandlingError env
+
+  (* [error] handles errors. *)
+
+  and error env =
+    assert env.error;
+
+    (* Consult the column associated with the [error] pseudo-token in the
+       action table. *)
+
+    T.action
+      env.current                    (* determines a row *)
+      T.error_terminal               (* determines a column *)
+      T.error_value
+      error_shift                    (* shift continuation *)
+      error_reduce                   (* reduce continuation *)
+      error_fail                     (* failure continuation *)
+      env
+
+  and error_shift env please_discard terminal value s' =
+
+    (* Here, [terminal] is [T.error_terminal], and [value] is [T.error_value]. *)
+
+    assert (terminal = T.error_terminal && value = T.error_value);
+
+    (* This state is capable of shifting the [error] token. *)
+
+    if log then
+      Log.handling_error env.current;
+    shift env please_discard terminal value s'
+
+  and error_reduce env prod =
+
+    (* This state is capable of performing a reduction on [error]. *)
+
+    if log then
+      Log.handling_error env.current;
+    reduce env prod
+      (* Intentionally calling [reduce] instead of [announce_reduce].
+         It does not seem very useful, and it could be confusing, to
+         expose the reduction steps taken during error handling. *)
+
+  and error_fail env =
+
+    (* This state is unable to handle errors. Attempt to pop a stack
+       cell. *)
+
+    let cell = env.stack in
+    let next = cell.next in
+    if next == cell then
+
+      (* The stack is empty. Die. *)
+
+      Rejected
+
+    else begin
+
+      (* The stack is nonempty. Pop a cell, updating the current state
+	 with that found in the popped cell, and try again. *)
+
+      let env = { env with
+        stack = next;
+        current = cell.state
+      } in
+      HandlingError env
+
+    end
+
+  (* End of the nest of tail recursive functions. *)
+
+  (* --------------------------------------------------------------------------- *)
+  (* --------------------------------------------------------------------------- *)
+
+  (* The incremental interface. See [EngineTypes]. *)
+
+  (* [start s] begins the parsing process. *)
+
+  let start (s : state) (initial : Lexing.position) : semantic_value checkpoint =
+    
+    (* Build an empty stack. This is a dummy cell, which is its own successor.
+       Its [next] field WILL be accessed by [error_fail] if an error occurs and
+       is propagated all the way until the stack is empty. Its [endp] field WILL
+       be accessed (by a semantic action) if an epsilon production is reduced
+       when the stack is empty. *)
+
+    let rec empty = {
+      state = s;                          (* dummy *)
+      semv = T.error_value;               (* dummy *)
+      startp = initial;                   (* dummy *)
+      endp = initial;
+      next = empty;
+    } in
+
+    (* Build an initial environment. *)
+
+    (* Unfortunately, there is no type-safe way of constructing a
+       dummy token. Tokens carry semantic values, which in general
+       we cannot manufacture. This instance of [Obj.magic] could
+       be avoided by adopting a different representation (e.g., no
+       [env.error] field, and an option in the first component of
+       [env.triple]), but I like this representation better. *)
+
+    let dummy_token = Obj.magic () in
+    let env = {
+      error = false;
+      triple = (dummy_token, initial, initial); (* dummy *)
+      stack = empty;
+      current = s;
+    } in
+
+    (* Begin parsing. *)
+
+    (* The parameter [please_discard] here is [true], which means we know
+       that we must read at least one token. This claim relies on the fact
+       that we have ruled out the two special cases where a start symbol
+       recognizes the empty language or the singleton language {epsilon}. *)
+
+    run env true
+
+  (* [offer checkpoint triple] is invoked by the user in response to a
+     checkpoint of the form [InputNeeded env]. It checks that [checkpoint] is
+     indeed of this form, and invokes [discard]. *)
+
+  (* [resume checkpoint] is invoked by the user in response to a checkpoint of
+     the form [AboutToReduce (env, prod)] or [HandlingError env]. It checks
+     that [checkpoint] is indeed of this form, and invokes [reduce] or
+     [error], as appropriate. *)
+
+  (* In reality, [offer] and [resume] accept an argument of type
+     [semantic_value checkpoint] and produce a checkpoint of the same type.
+     The choice of [semantic_value] is forced by the fact that this is the
+     parameter of the checkpoint [Accepted]. *)
+
+  (* We change this as follows. *)
+
+  (* We change the argument and result type of [offer] and [resume] from
+     [semantic_value checkpoint] to ['a checkpoint]. This is safe, in this
+     case, because we give the user access to values of type [t checkpoint]
+     only if [t] is indeed the type of the eventual semantic value for this
+     run. (More precisely, by examining the signatures [INCREMENTAL_ENGINE]
+     and [INCREMENTAL_ENGINE_START], one finds that the user can build a value
+     of type ['a checkpoint] only if ['a] is [semantic_value]. The table
+     back-end goes further than this and produces versions of [start] composed
+     with a suitable cast, which give the user access to a value of type
+     [t checkpoint] where [t] is the type of the start symbol.) *)
+
+  let offer : 'a . 'a checkpoint ->
+                   token * Lexing.position * Lexing.position ->
+                   'a checkpoint
+  = function
+    | InputNeeded env ->
+        Obj.magic discard env
+    | _ ->
+        raise (Invalid_argument "offer expects InputNeeded")
+
+  let resume : 'a . 'a checkpoint -> 'a checkpoint = function
+    | HandlingError env ->
+        Obj.magic error env
+    | Shifting (_, env, please_discard) ->
+        Obj.magic run env please_discard
+    | AboutToReduce (env, prod) ->
+        Obj.magic reduce env prod
+    | _ ->
+        raise (Invalid_argument "resume expects HandlingError | AboutToReduce")
+
+  (* --------------------------------------------------------------------------- *)
+  (* --------------------------------------------------------------------------- *)
+
+  (* The traditional interface. See [EngineTypes]. *)
+
+  (* --------------------------------------------------------------------------- *)
+
+  (* Wrapping a lexer and lexbuf as a token supplier. *)
+
+  type supplier =
+    unit -> token * Lexing.position * Lexing.position
+
+  let lexer_lexbuf_to_supplier
+      (lexer : Lexing.lexbuf -> token)
+      (lexbuf : Lexing.lexbuf)
+  : supplier =
+    fun () ->
+      let token = lexer lexbuf in
+      let startp = lexbuf.Lexing.lex_start_p
+      and endp = lexbuf.Lexing.lex_curr_p in
+      token, startp, endp
+
+  (* --------------------------------------------------------------------------- *)
+
+  (* The main loop repeatedly handles intermediate checkpoints, until a final
+     checkpoint is obtained. This allows implementing the monolithic interface
+     ([entry]) in terms of the incremental interface ([start], [offer],
+     [handle], [reduce]). *)
+
+  (* By convention, acceptance is reported by returning a semantic value, whereas
+     rejection is reported by raising [Error]. *)
+
+  (* [loop] is polymorphic in ['a]. No cheating is involved in achieving this.
+     All of the cheating resides in the types assigned to [offer] and [handle]
+     above. *)
+
+  let rec loop : 'a . supplier -> 'a checkpoint -> 'a =
+    fun read checkpoint ->
+    match checkpoint with
+    | InputNeeded _ ->
+        (* The parser needs a token. Request one from the lexer,
+           and offer it to the parser, which will produce a new
+           checkpoint. Then, repeat. *)
+        let triple = read() in
+        let checkpoint = offer checkpoint triple in
+        loop read checkpoint
+    | Shifting _
+    | AboutToReduce _
+    | HandlingError _ ->
+        (* The parser has suspended itself, but does not need
+           new input. Just resume the parser. Then, repeat. *)
+        let checkpoint = resume checkpoint in
+        loop read checkpoint
+    | Accepted v ->
+        (* The parser has succeeded and produced a semantic value.
+           Return this semantic value to the user. *)
+        v
+    | Rejected ->
+        (* The parser rejects this input. Raise an exception. *)
+        raise Error
+
+  let entry (s : state) lexer lexbuf : semantic_value =
+    let initial = lexbuf.Lexing.lex_curr_p in
+    loop (lexer_lexbuf_to_supplier lexer lexbuf) (start s initial)
+
+  (* --------------------------------------------------------------------------- *)
+
+  (* [loop_handle] stops if it encounters an error, and at this point, invokes
+     its failure continuation, without letting Menhir do its own traditional
+     error-handling (which involves popping the stack, etc.). *)
+
+  let rec loop_handle succeed fail read checkpoint =
+    match checkpoint with
+    | InputNeeded _ ->
+        let triple = read() in
+        let checkpoint = offer checkpoint triple in
+        loop_handle succeed fail read checkpoint
+    | Shifting _
+    | AboutToReduce _ ->
+        let checkpoint = resume checkpoint in
+        loop_handle succeed fail read checkpoint
+    | HandlingError _
+    | Rejected ->
+        (* The parser has detected an error. Invoke the failure continuation. *)
+        fail checkpoint
+    | Accepted v ->
+        (* The parser has succeeded and produced a semantic value. Invoke the
+           success continuation. *)
+        succeed v
+
+  (* --------------------------------------------------------------------------- *)
+
+  (* [loop_handle_undo] is analogous to [loop_handle], except it passes a pair
+     of checkpoints to the failure continuation.
+
+     The first (and oldest) checkpoint is the last [InputNeeded] checkpoint that
+     was encountered before the error was detected. The second (and newest)
+     checkpoint is where the error was detected, as in [loop_handle]. Going back
+     to the first checkpoint can be thought of as undoing any reductions that
+     were performed after seeing the problematic token. (These reductions must
+     be default reductions or spurious reductions.) *)
+
+  let rec loop_handle_undo succeed fail read (inputneeded, checkpoint) =
+    match checkpoint with
+    | InputNeeded _ ->
+        (* Update the last recorded [InputNeeded] checkpoint. *)
+        let inputneeded = checkpoint in
+        let triple = read() in
+        let checkpoint = offer checkpoint triple in
+        loop_handle_undo succeed fail read (inputneeded, checkpoint)
+    | Shifting _
+    | AboutToReduce _ ->
+        let checkpoint = resume checkpoint in
+        loop_handle_undo succeed fail read (inputneeded, checkpoint)
+    | HandlingError _
+    | Rejected ->
+        fail inputneeded checkpoint
+    | Accepted v ->
+        succeed v
+
+  (* For simplicity, we publish a version of [loop_handle_undo] that takes a
+     single checkpoint as an argument, instead of a pair of checkpoints. We
+     check that the argument is [InputNeeded _], and duplicate it. *)
+
+  (* The parser cannot accept or reject before it asks for the very first
+     character of input. (Indeed, we statically reject a symbol that
+     generates the empty language or the singleton language {epsilon}.)
+     So, the [start] checkpoint must match [InputNeeded _]. Hence, it is
+     permitted to call [loop_handle_undo] with a [start] checkpoint. *)
+
+  let loop_handle_undo succeed fail read checkpoint =
+    assert (match checkpoint with InputNeeded _ -> true | _ -> false);
+    loop_handle_undo succeed fail read (checkpoint, checkpoint)
+
+  (* ------------------------------------------------------------------------ *)
+
+  (* [loop_test f checkpoint accu] assumes that [checkpoint] has been obtained
+     by submitting a token to the parser. It runs the parser from [checkpoint],
+     through an arbitrary number of reductions, until the parser either accepts
+     this token (i.e., shifts) or rejects it (i.e., signals an error). If the
+     parser decides to shift, then the accumulator is updated by applying the
+     user function [f] to the [env] just before shifting and to the old [accu].
+     Otherwise, the accumulator is not updated, i.e., [accu] is returned. *)
+
+  (* This test causes some semantic actions to be run! The semantic actions
+     should be side-effect free, or their side-effects should be harmless. *)
+
+  let rec loop_test f checkpoint accu =
+    match checkpoint with
+    | Shifting (env, _, _) ->
+        (* The parser is about to shift, which means it is willing to
+           consume the terminal symbol that we have fed it. Update the
+           accumulator with the state just before this transition. *)
+        f env accu
+    | AboutToReduce _ ->
+        (* The parser wishes to reduce. Just follow. *)
+        loop_test f (resume checkpoint) accu
+    | HandlingError _ ->
+        (* The parser fails, which means it rejects the terminal symbol
+           that we have fed it. Do not update the accumulator. *)
+        accu
+    | InputNeeded _
+    | Accepted _
+    | Rejected ->
+        (* None of these cases can arise. Indeed, after a token is submitted
+           to it, the parser must shift, reduce, or signal an error, before
+           it can request another token or terminate. *)
+        assert false
+
+  (* --------------------------------------------------------------------------- *)
+
+  (* The function [loop_test] can be used, after an error has been detected, to
+     dynamically test which tokens would have been accepted at this point. We
+     provide this test, ready for use. *)
+
+  (* For completeness, one must undo any spurious reductions before carrying out
+     this test -- that is, one must apply [acceptable] to the FIRST checkpoint
+     that is passed by [loop_handle_undo] to its failure continuation. *)
+
+  (* This test causes some semantic actions to be run! The semantic actions
+     should be side-effect free, or their side-effects should be harmless. *)
+
+  (* The position [pos] is used as the start and end positions of the
+     hypothetical token, and may be picked up by the semantic actions. We
+     suggest using the position where the error was detected. *)
+
+  let acceptable checkpoint token pos =
+    let triple = (token, pos, pos) in
+    let checkpoint = offer checkpoint triple in
+    loop_test (fun _env _accu -> true) checkpoint false
+
+  (* --------------------------------------------------------------------------- *)
+
+  (* The type ['a lr1state] describes the (non-initial) states of the LR(1)
+     automaton. The index ['a] represents the type of the semantic value
+     associated with the state's incoming symbol. *)
+
+  (* The type ['a lr1state] is defined as an alias for [state], which itself
+     is usually defined as [int] (see [TableInterpreter]). So, ['a lr1state]
+     is technically a phantom type, but should really be thought of as a GADT
+     whose data constructors happen to be represented as integers. It is
+     presented to the user as an abstract type (see [IncrementalEngine]). *)
+
+  type 'a lr1state =
+      state
+
+  (* --------------------------------------------------------------------------- *)
+
+  (* Stack inspection. *)
+
+  (* We offer a read-only view of the parser's state as a stream of elements.
+     Each element contains a pair of a (non-initial) state and a semantic
+     value associated with (the incoming symbol of) this state. Note that the
+     type [element] is an existential type. *)
+
+  type element =
+    | Element: 'a lr1state * 'a * Lexing.position * Lexing.position -> element
+
+  open General
+
+  type stack =
+    element stream
+
+  (* If [current] is the current state and [cell] is the top stack cell,
+     then [stack cell current] is a view of the parser's state as a stream
+     of elements. *)
+
+  let rec stack cell current : element stream =
+    lazy (
+      (* The stack is empty iff the top stack cell is its own successor. In
+         that case, the current state [current] should be an initial state
+         (which has no incoming symbol).
+         We do not allow the user to inspect this state. *)
+      let next = cell.next in
+      if next == cell then
+        Nil
+      else
+        (* Construct an element containing the current state [current] as well
+           as the semantic value contained in the top stack cell. This semantic
+           value is associated with the incoming symbol of this state, so it
+           makes sense to pair them together. The state has type ['a state] and
+           the semantic value has type ['a], for some type ['a]. Here, the OCaml
+           type-checker thinks ['a] is [semantic_value] and considers this code
+           well-typed. Outside, we will use magic to provide the user with a way
+           of inspecting states and recovering the value of ['a]. *)
+        let element = Element (
+          current,
+          cell.semv,
+          cell.startp,
+          cell.endp
+        ) in
+        Cons (element, stack next cell.state)
+    )
+
+  let stack env : element stream =
+    stack env.stack env.current
+
+  (* --------------------------------------------------------------------------- *)
+
+  (* Access to the position of the lookahead token. *)
+
+  let positions { triple = (_, startp, endp); _ } =
+    startp, endp
+
+  (* --------------------------------------------------------------------------- *)
+
+  (* Access to information about default reductions. *)
+
+  (* We can make this a function of states, or a function of environments. For
+     now, the latter appears simpler. *)
+
+  let has_default_reduction env : bool =
+    T.default_reduction
+      env.current
+      (fun _env _prod -> true)
+      (fun _env -> false)
+      env
+
+end
+

@@ -1,0 +1,7 @@
+/src/_build/
+/src/_stage1/
+/src/_stage2/
+/src/_stage3/
+/src/.versioncheck
+.#*
+.*.swp
