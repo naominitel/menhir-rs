@@ -259,7 +259,7 @@ let is_valid_nonterminal_character = function
       false
 
 let restrict filename =
-  let m = Bytes.of_string (Filename.chop_suffix filename (if Settings.coq then ".vy" else ".mly")) in
+  let m = Bytes.of_string (Filename.chop_suffix filename (Settings.file_ext)) in
   for i = 0 to Bytes.length m - 1 do
     if not (is_valid_nonterminal_character (Bytes.get m i)) then
       Bytes.set m i '_'

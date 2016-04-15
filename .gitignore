@@ -3,5 +3,7 @@
 /src/_stage2/
 /src/_stage3/
 /src/.versioncheck
+Cargo.lock
+target/
 .#*
 .*.swp

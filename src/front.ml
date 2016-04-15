@@ -19,11 +19,10 @@
 (* Reading a grammar from a file. *)
 
 let load_partial_grammar filename =
-  let validExt = if Settings.coq then ".vy" else ".mly" in
-  if not (Filename.check_suffix filename validExt) then
+  if not (Filename.check_suffix filename Settings.file_ext) then
     Error.error []
       "argument file names should end in %s. \"%s\" is not accepted."
-      validExt filename;
+      Settings.file_ext filename;
   Error.set_filename filename;
   try
 

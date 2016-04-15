@@ -55,7 +55,12 @@ let write program =
    module language.) *)
 
 let () =
-  if Settings.coq then
+  if Settings.rust then
+    let filename = Settings.base ^ ".rs" in
+    let f = open_out filename in
+    RustBackend.write_all f ;
+    exit 0
+  else if Settings.coq then
     let module B = CoqBackend.Run (struct end) in
     let filename = Settings.base ^ ".v" in
     let f = open_out filename in

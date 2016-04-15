@@ -106,6 +106,12 @@ module Nonterminal = struct
   let start =
     List.length new_start_nonterminals
 
+  let start_types = Array.make start (Stretch.Inferred "")
+  let _ = StringSet.fold (fun s idx ->
+    start_types.(idx) <- StringMap.find s grammar.types ;
+    idx + 1
+  ) grammar.start_symbols 0
+
   let (n : int), (name : string array), (map : int StringMap.t) =
     Misc.index (new_start_nonterminals @ original_nonterminals)
 
@@ -150,8 +156,9 @@ module Nonterminal = struct
     Misc.foldij start n f accu
 
   let ocamltype nt =
-    assert (not (is_start nt));
-    try
+    if is_start nt then
+      Some (start_types.(nt))
+    else try
       Some (StringMap.find (print false nt) grammar.types)
     with Not_found ->
       None
@@ -276,6 +283,9 @@ module Terminal = struct
     assert (sharp = n - 1)
   let mapx f =
     Misc.mapi sharp f
+
+  let map_real f =
+    Misc.mapij 1 (n - 1) f
 
   let () =
     assert (error = 0)

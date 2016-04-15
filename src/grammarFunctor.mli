@@ -193,6 +193,8 @@ module Terminal : sig
 
   val mapx: (t -> 'a) -> 'a list
 
+  val map_real: (t -> 'a) -> 'a list
+
   (* [iter_real] offers iteration over all real terminals. *)
 
   val iter_real: (t -> unit) -> unit

@@ -1,0 +1,11 @@
+[package]
+name = "menhir_runtime"
+version = "0.1.0"
+authors = ["Naomi Nitel <naominitel@gmail.com>"]
+
+[lib]
+name = "menhir_runtime"
+path = "lib.rs"
+
+[dependencies]
+log = "*"

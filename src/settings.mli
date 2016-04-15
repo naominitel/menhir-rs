@@ -125,6 +125,10 @@ val logC: int (* diagnostics on the generated code *)
 
 val timings: bool
 
+(* The extension of the input file. *)
+
+val file_ext: string
+
 (* The base name that should be used for the files that we create.
    This name can contain a path. *)
 
@@ -169,6 +173,10 @@ val coq_no_complete : bool
 (* Whether the coq backend should ignore types and semantic actions. *)
 
 val coq_no_actions : bool
+
+(* Whether to generate a Rust parser. *)
+
+val rust : bool
 
 (* Whether unresolved LR(1) conflicts, useless precedence declarations,
    productions that are never reduced, etc. should be treated as errors. *)

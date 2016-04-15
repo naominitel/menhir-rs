@@ -168,6 +168,9 @@ let coq_no_complete =
 let coq_no_actions =
   ref false
 
+let rust =
+  ref false
+
 let strict =
   ref false
 
@@ -229,6 +232,7 @@ let options = Arg.align [
   "--coq", Arg.Set coq, " Generate a formally verified parser, in Coq";
   "--coq-no-complete", Arg.Set coq_no_complete, " Do not generate a proof of completeness";
   "--coq-no-actions", Arg.Set coq_no_actions, " Ignore semantic actions in the Coq output";
+  "--rust", Arg.Set rust, " Generate a Rust parser";
   "--depend", Arg.Unit (fun () -> depend := OMPostprocess), " Invoke ocamldep and display dependencies";
   "--dump", Arg.Set dump, " Describe the automaton in <basename>.automaton";
   "--echo-errors", Arg.String set_echo_errors, "<filename> Echo the sentences in a .messages file";
@@ -359,6 +363,8 @@ let stdlib_filename =
 let filenames =
   StringSet.elements !filenames
 
+let file_ext = if !coq then ".vy" else if !rust then ".rsy" else ".mly"
+
 let base =
   if !base = "" then
     match filenames with
@@ -366,7 +372,7 @@ let base =
 	fprintf stderr "%s\n" usage;
 	exit 1
     | [ filename ] ->
-	Filename.chop_suffix filename (if !coq then ".vy" else ".mly")
+	Filename.chop_suffix filename file_ext
     | _ ->
 	fprintf stderr "Error: you must specify --base when providing multiple input files.\n";
 	exit 1
@@ -468,6 +474,9 @@ let coq_no_complete =
 
 let coq_no_actions =
   !coq_no_actions
+
+let rust =
+  !rust
 
 let strict =
   !strict

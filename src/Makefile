@@ -37,6 +37,7 @@ everyday: installation.ml stage1
 
 library:
 	$(OCAMLBUILD) $(LIBFILES)
+	cd rust_runtime ; cargo build
 
 # ----------------------------------------------------------------------------
 # Building Menhir from scratch (a.k.a. bootstrapping).
@@ -97,3 +98,4 @@ stage3:
 
 clean::
 	rm -rf .versioncheck _build _stage1 _stage2 _stage3
+	cd rust_runtime ; cargo clean
