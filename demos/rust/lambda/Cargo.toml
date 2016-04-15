@@ -1,0 +1,9 @@
+[package]
+name = "lambda"
+version = "0.1.0"
+authors = ["Naomi Nitel <naominitel@gmail.com>"]
+build = "build.rs"
+
+[dependencies]
+menhir_runtime = { path = "../../../src/rust_runtime/" }
+env_logger = "*"
