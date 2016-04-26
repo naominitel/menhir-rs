@@ -37,6 +37,8 @@ val compress:
   'a array array ->
   'a table
 
+val decode: int -> int
+
 (* [get ct i j] returns the value found at indices [i] and [j] in the
    compressed table [ct]. This function call is permitted only if the
    value found at indices [i] and [j] in the original table is

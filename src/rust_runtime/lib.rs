@@ -33,16 +33,18 @@ pub type Stack<YYType> = Vec<(usize, YYType)>;
 // always be [[Action ; N] ; M] wrapped in a type that implements indexing by a
 // tuple over it.
 // We don't need the goto table, only the semantic actions will actually use it.
-pub fn parse<TokenType, LexerType, ParseTableType, DefRedType, YYType>(
+pub fn parse<TokenType, LexerType, ParseTableType, DefRedType, ErrType, YYType>(
         mut lexer: &mut LexerType,
         parse_table: &ParseTableType,
         default_reduction: &DefRedType,
+        error_table: &ErrType,
         next_token: fn(&mut LexerType) -> (YYType, usize),
         initial: usize
     ) -> Result<Stack<YYType>, ()>
     where LexerType:      Iterator<Item = TokenType>,
           ParseTableType: Index<(usize, usize), Output = Action<YYType>>,
-          DefRedType:     Index<usize, Output = Option<SemAct<YYType>>> {
+          DefRedType:     Index<usize, Output = Option<SemAct<YYType>>>,
+          ErrType:        Index<(usize, usize), Output = bool> {
 
     // the current state
     let mut state = initial;
@@ -54,6 +56,11 @@ pub fn parse<TokenType, LexerType, ParseTableType, DefRedType, YYType>(
     // the parsing loop
     'a: loop {
         debug!("current state: {}, token: {}", state, tok);
+
+        if error_table[(state, tok)] {
+            return Err(());
+        }
+
         match parse_table[(state, tok)] {
             Action::Shift(shift) => {
                 stack.push((state, yylval));
@@ -83,7 +90,7 @@ pub fn parse<TokenType, LexerType, ParseTableType, DefRedType, YYType>(
             }
 
             Action::Reduce(None) => break,
-            Action::Err => return Err(())
+            Action::Err => unreachable!()
         }
     }
 

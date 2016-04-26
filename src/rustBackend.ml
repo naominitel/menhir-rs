@@ -122,21 +122,68 @@ let pp_parse_table ff =
                  | Some (prod, _) ->
                      default_table.(st) <- Some(prod)) ;
 
-    Format.fprintf ff "const ACT_TABLE: [[Action<YYType> ; %d] ; %d] = [\n%a\n];\n\n"
-        (Terminal.n) (Array.length parse_table)
-        (pp_array
-             (fun ff v ->
-                  Format.fprintf ff "    [ %a ]"
-                      (pp_array (fun ff v -> Format.fprintf ff "%a" pp_act v) ", ") v)
-             ",\n") parse_table ;
+    (* the error bitmap. *)
+    let error = Array.make (Lr1.n * Terminal.n) false in
+    Array.iteri
+        (fun st a ->
+             Array.iteri (fun t act -> error.(st * Terminal.n + t) <- act = Err) a)
+        parse_table ;
 
-    Format.fprintf ff "static GOTO_TABLE: [[usize ; %d] ; %d] = [\n%a\n];\n\n"
-        (Nonterminal.n) (Array.length goto_table)
+    Format.fprintf ff "const ERROR_TABLE: [bool ; %d] = [\n%a\n];\n\n"
+        (Lr1.n * Terminal.n)
         (pp_array
-             (fun ff v ->
-                  Format.fprintf ff "    [ %a ]"
-                      (pp_array (fun ff v -> Format.fprintf ff "%d" v) ", ") v)
-             ",\n") goto_table ;
+             (fun ff v -> fprintf ff "%s" @@ if v then "true" else "false") ", ")
+        error ;
+
+    (* compress the parse table *)
+    let (displacement, parse_table) =
+        MenhirLib.RowDisplacement.compress
+            (=) (fun x -> x = Err) Err
+            (Lr1.n) (Terminal.n)
+            parse_table
+    in
+
+    (* FIXME: Menhir uses a special encoding for displacements to avoid
+     * negative numbers because of the representation used for serializing
+     * the tables into OCaml code. we don't need that so for now we just
+     * fix it here but we should add an argument to the compress function
+     * to be able to opt-out from this encoding... *)
+    Array.iteri
+        (fun i d ->
+             displacement.(i) <- MenhirLib.RowDisplacement.decode displacement.(i))
+        displacement ;
+
+    Format.fprintf ff "const ACT_TABLE_DISP: [isize ; %d] = [\n%a\n];\n\n"
+        (Array.length displacement) (pp_array (fun ff x -> fprintf ff "%d" x) ",\n")
+        displacement ;
+
+    Format.fprintf ff "const ACT_TABLE: [Action<YYType> ; %d] = [\n%a\n];\n\n"
+        (Array.length parse_table)
+        (pp_array (fun ff v -> Format.fprintf ff "%a" pp_act v) ",\n")
+        parse_table ;
+
+    (* compress the GOTO table *)
+    let (displacement, goto_table) =
+        MenhirLib.RowDisplacement.compress
+            (=) (fun x -> x = 0) 0
+            (Lr1.n) (Terminal.n)
+            goto_table
+    in
+
+    (* FIXME: As above... *)
+    Array.iteri
+        (fun i d ->
+             displacement.(i) <- MenhirLib.RowDisplacement.decode displacement.(i))
+        displacement ;
+
+    Format.fprintf ff "const GOTO_TABLE_DISP: [isize ; %d] = [\n%a\n];\n\n"
+        (Array.length displacement) (pp_array (fun ff x -> fprintf ff "%d" x) ",\n")
+        displacement ;
+
+    Format.fprintf ff "const GOTO_TABLE: [usize ; %d] = [\n%a\n];\n\n"
+        (Array.length goto_table)
+        (pp_array (fun ff v -> Format.fprintf ff "%d" v) ",\n")
+        goto_table ;
 
     Format.fprintf ff "const DEFAULT_REDUCTION: [%s ; %d] = [\n%a\n];\n\n"
         "Option<SemAct<YYType>>" (Array.length default_table)
@@ -144,8 +191,57 @@ let pp_parse_table ff =
              (fun ff v -> match v with
                   | None -> fprintf ff "None"
                   | Some prod -> fprintf ff "Some(%a)" pp_semact prod) ",\n")
-        default_table
+        default_table ;
 
+    (* Print wrappers *)
+
+    Format.fprintf ff
+        "struct ErrTable([bool ; %d]);\n\n\
+         impl Index<(usize, usize)> for ErrTable {\n\
+         \    type Output = bool;\n\n\
+         \    fn index(&self, (st, tok): (usize, usize)) -> &bool {\n\
+         \        let &ErrTable(ref table) = self;\n\
+         \        &table[st * %d + tok]\n\
+         \    }
+         }\n\n\
+         static ERR_TABLE_WRAP: ErrTable = ErrTable(ERROR_TABLE);\n\n"
+         (Lr1.n * Terminal.n) (Terminal.n) ;
+
+    Format.fprintf ff
+        "struct ActTable([isize ; %d], [Action<YYType> ; %d]);\n\n\
+         impl Index<(usize, usize)> for ActTable {\n\
+         \    type Output = Action<YYType>;\n\n\
+         \    fn index(&self, (st, tok): (usize, usize)) -> &Action<YYType> {\n\
+         \        let &ActTable(ref disp, ref table) = self;\n\
+         \        &table[(disp[st] + tok as isize) as usize]\n\
+         \    }
+         }\n\n\
+         static ACT_TABLE_WRAP: ActTable = ActTable(ACT_TABLE_DISP, ACT_TABLE);\n\n"
+        Lr1.n (Array.length parse_table) ;
+
+    Format.fprintf ff
+        "struct GotoTable([isize ; %d], [usize ; %d]);\n\n\
+         impl Index<(usize, usize)> for GotoTable {\n\
+         \    type Output = usize;\n\n\
+         \    fn index(&self, (st, nt): (usize, usize)) -> &usize {\n\
+         \        let &GotoTable(ref disp, ref table) = self;\n\
+         \        &table[(disp[st] + nt as isize) as usize]\n\
+         \    }
+         }\n\n\
+         static GOTO_TABLE_WRAP: GotoTable = GotoTable(GOTO_TABLE_DISP, GOTO_TABLE);\n\n"
+        Lr1.n (Array.length goto_table) ;
+
+    Format.fprintf ff
+        "struct DefTable([Option<SemAct<YYType>> ; %d]);\n\n\
+         impl Index<usize> for DefTable {\n\
+         \    type Output = Option<SemAct<YYType>>;\n\n\
+         \    fn index(&self, st: usize) -> &Option<SemAct<YYType>> {\n\
+         \        let &DefTable(ref table) = self;\n\
+         \        &table[st]\n\
+         \    }
+         }\n\n\
+         static DEF_TABLE_WRAP: DefTable = DefTable(DEFAULT_REDUCTION);\n\n"
+        Lr1.n
 
 let pp_action ff act = match Action.to_il_expr act with
     | IL.ETextual s -> Format.fprintf ff "%s" s.Stretch.stretch_content
@@ -168,7 +264,7 @@ let pp_actions ff =
                  "fn RULE_%d(state: usize, stack: &mut Vec<(usize, YYType)>) -> usize {\n\
                  \    %a\n\
                  \    stack.push((state, YYType::%s(%a)));\n\
-                 \    GOTO_TABLE[state][%d] - 1\n\
+                 \    GOTO_TABLE_WRAP[(state, %d)] - 1\n\
                   }\n\n"
                  (Production.p2i r)
                  (pp_list
@@ -214,31 +310,6 @@ let pp_nexttoken ff =
              ",\n")
         (Terminal.map_real (fun t -> Terminal.(ocamltype t, print t, t2i t)))
 
-let pp_wrappers ff =
-    Format.fprintf ff
-        "struct ActTable([[Action<YYType> ; %d] ; %d]);\n\n\
-         impl Index<(usize, usize)> for ActTable {\n\
-         \    type Output = Action<YYType>;\n\n\
-         \    fn index(&self, (st, tok): (usize, usize)) -> &Action<YYType> {\n\
-         \        let &ActTable(ref table) = self;\n\
-         \        &table[st][tok]\n\
-         \    }
-         }\n\n\
-         static ACT_TABLE_WRAP: ActTable = ActTable(ACT_TABLE);\n\n"
-        Terminal.n Lr1.n ;
-
-    Format.fprintf ff
-        "struct DefTable([Option<SemAct<YYType>> ; %d]);\n\n\
-         impl Index<usize> for DefTable {\n\
-         \    type Output = Option<SemAct<YYType>>;\n\n\
-         \    fn index(&self, st: usize) -> &Option<SemAct<YYType>> {\n\
-         \        let &DefTable(ref table) = self;\n\
-         \        &table[st]\n\
-         \    }
-         }\n\n\
-         static DEF_TABLE_WRAP: DefTable = DefTable(DEFAULT_REDUCTION);\n\n"
-        Lr1.n
-
 let pp_start ff (nt, init_st, ty) =
     let Stretch.Declared(ty) = ty in
     let name = Nonterminal.print false nt in
@@ -246,8 +317,8 @@ let pp_start ff (nt, init_st, ty) =
         "pub fn %s<Lexer>(lexer: &mut Lexer) -> Result<%s, ()>\n\
          \    where Lexer: Iterator<Item = Token> {\n\
          \    let mut stack = try!(\
-         \        menhir_runtime::parse::<Token, Lexer, ActTable, DefTable, YYType>(\n\
-         \            lexer, &ACT_TABLE_WRAP, &DEF_TABLE_WRAP, next_tok, %d\n\
+         \        menhir_runtime::parse::<Token, Lexer, ActTable, DefTable, ErrTable, YYType>(\n\
+         \            lexer, &ACT_TABLE_WRAP, &DEF_TABLE_WRAP, &ERR_TABLE_WRAP, next_tok, %d\n\
          \        )
          \    );\n\n\
          \    match stack.pop().unwrap() {\n\
@@ -269,7 +340,6 @@ let pp_grammar ff =
     pp_parse_table ff ;
     pp_actions ff ;
     pp_nexttoken ff ;
-    pp_wrappers ff ;
     pp_main ff ;
     ()
 
