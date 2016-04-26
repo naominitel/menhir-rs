@@ -29,7 +29,7 @@ let pp_use ff =
     Format.fprintf ff
         "extern crate menhir_runtime;\n\
          use std::ops::Index;
-         use self::menhir_runtime::{Action, parse};"
+         use self::menhir_runtime::{Action, parse, SemAct};"
 
 let pp_variant ff = function
     | { ctor ; types = [] } -> fprintf ff "%s" ctor
@@ -78,14 +78,20 @@ let pp_parser_enums ff =
     pp_yytype ff (terminals @ nonterminals)
 
 type action =
-    | Shift of int  (* state number *)
-    | Reduce of int (* (semantic) action number *)
-    | Err           (* error *)
-    | Acc           (* accepting state *)
+    | Shift of int               (* state number *)
+    | Reduce of Production.index (* (semantic) action number *)
+    | Err                        (* error *)
+    | Acc                        (* accepting state *)
+
+let pp_semact ff prod =
+    if Production.is_start prod then
+        Format.fprintf ff "None"
+    else
+        Format.fprintf ff "Some(RULE_%d)" @@ Production.p2i prod
 
 let pp_act ff = function
     | Shift x  -> Format.fprintf ff "Action::Shift(%d)" x
-    | Reduce x -> Format.fprintf ff "Action::Reduce(RULE_%d)" x
+    | Reduce x -> Format.fprintf ff "Action::Reduce(%a)" pp_semact x
     | Err      -> Format.fprintf ff "Action::Err"
     | Acc      -> Format.fprintf ff "Action::Acc"
 
@@ -93,43 +99,28 @@ let pp_parse_table ff =
     (* Build parse table *)
     let goto_table  = Array.init Lr1.n (fun _ -> Array.make (Nonterminal.n) 0) in
     let parse_table = Array.init Lr1.n (fun _ -> Array.make (Terminal.n) Err)  in
+    let default_table = Array.init Lr1.n (fun _ -> None) in
 
     Lr1.iter
         (fun node ->
              let st = Lr1.number node in
-             SymbolMap.iter
-                 (fun sym dst ->
-                      let dst = Lr1.number dst in
-                      match sym with
-                          | Symbol.N nt -> goto_table.(st).(Nonterminal.n2i nt) <- 1 + dst
-                          | Symbol.T t  -> parse_table.(st).(Terminal.t2i t) <- Shift dst)
-                 (Lr1.transitions node) ;
 
-             TerminalMap.iter
-                 (fun t rules ->
-                      parse_table.(st).(Terminal.t2i t) <-
-                          Reduce (Production.p2i @@ List.hd rules))
-                 (Lr1.reductions node)) ;
+             match Invariant.has_default_reduction node with
+                 | None ->
+                     SymbolMap.iter
+                         (fun sym dst ->
+                              let dst = Lr1.number dst in match sym with
+                                  | Symbol.N nt -> goto_table.(st).(Nonterminal.n2i nt) <- 1 + dst
+                                  | Symbol.T t  -> parse_table.(st).(Terminal.t2i t) <- Shift dst)
+                         (Lr1.transitions node) ;
 
-    (* This is a bit tricky. To detect the success of parsing, we put an Acc
-     * marker on EOF in the state we enter after reducing a production for a
-     * start symbol. The problem is that Menhir generates pseudo-start symbols
-     * and we don't know anymore the automaton states of the true start symbols
-     * so we rely on the fact that the generated symbols are named something'
-     * and remove the quote...
-     * Another option would be to generate semantic actions for those symbols
-     * and add a state that only has an Acc action on EOF... *)
-    ProductionMap.iter
-        (fun prod node ->
-             let node = Lr1.number node in
-
-             (* ERK *)
-             let name = Nonterminal.print false @@ Production.nt prod in
-             let orig = Nonterminal.lookup @@ String.sub name 0 (String.length name - 1) in
-
-             parse_table.(goto_table.(node).(Nonterminal.n2i orig))
-                        .(Terminal.t2i (Terminal.sharp)) <- Acc)
-        Lr1.entry ;
+                     TerminalMap.iter
+                         (fun t rules ->
+                              parse_table.(st).(Terminal.t2i t) <-
+                                  Reduce (List.hd rules))
+                         (Lr1.reductions node)
+                 | Some (prod, _) ->
+                     default_table.(st) <- Some(prod)) ;
 
     Format.fprintf ff "const ACT_TABLE: [[Action<YYType> ; %d] ; %d] = [\n%a\n];\n\n"
         (Terminal.n) (Array.length parse_table)
@@ -145,7 +136,16 @@ let pp_parse_table ff =
              (fun ff v ->
                   Format.fprintf ff "    [ %a ]"
                       (pp_array (fun ff v -> Format.fprintf ff "%d" v) ", ") v)
-             ",\n") goto_table
+             ",\n") goto_table ;
+
+    Format.fprintf ff "const DEFAULT_REDUCTION: [%s ; %d] = [\n%a\n];\n\n"
+        "Option<SemAct<YYType>>" (Array.length default_table)
+        (pp_array
+             (fun ff v -> match v with
+                  | None -> fprintf ff "None"
+                  | Some prod -> fprintf ff "Some(%a)" pp_semact prod) ",\n")
+        default_table
+
 
 let pp_action ff act = match Action.to_il_expr act with
     | IL.ETextual s -> Format.fprintf ff "%s" s.Stretch.stretch_content
@@ -225,7 +225,19 @@ let pp_wrappers ff =
          \    }
          }\n\n\
          static ACT_TABLE_WRAP: ActTable = ActTable(ACT_TABLE);\n\n"
-        Terminal.n Lr1.n
+        Terminal.n Lr1.n ;
+
+    Format.fprintf ff
+        "struct DefTable([Option<SemAct<YYType>> ; %d]);\n\n\
+         impl Index<usize> for DefTable {\n\
+         \    type Output = Option<SemAct<YYType>>;\n\n\
+         \    fn index(&self, st: usize) -> &Option<SemAct<YYType>> {\n\
+         \        let &DefTable(ref table) = self;\n\
+         \        &table[st]\n\
+         \    }
+         }\n\n\
+         static DEF_TABLE_WRAP: DefTable = DefTable(DEFAULT_REDUCTION);\n\n"
+        Lr1.n
 
 let pp_start ff (nt, init_st, ty) =
     let Stretch.Declared(ty) = ty in
@@ -234,8 +246,8 @@ let pp_start ff (nt, init_st, ty) =
         "pub fn %s<Lexer>(lexer: &mut Lexer) -> Result<%s, ()>\n\
          \    where Lexer: Iterator<Item = Token> {\n\
          \    let mut stack = try!(\
-         \        menhir_runtime::parse::<Token, Lexer, ActTable, YYType>(\n\
-         \            lexer, &ACT_TABLE_WRAP, next_tok, %d\n\
+         \        menhir_runtime::parse::<Token, Lexer, ActTable, DefTable, YYType>(\n\
+         \            lexer, &ACT_TABLE_WRAP, &DEF_TABLE_WRAP, next_tok, %d\n\
          \        )
          \    );\n\n\
          \    match stack.pop().unwrap() {\n\
