@@ -55,7 +55,7 @@ let encode_semact prod =
     if Production.is_start prod then
         EVariant (["None"], [])
     else
-        let prod_fun = Format.sprintf "RULE_%d" @@ Production.p2i prod in
+        let prod_fun = Format.sprintf "rule_%d" @@ Production.p2i prod in
         EVariant (["Some"], [EVar (prod_fun)])
 
 (* Encode an action as the corresponding Rust variant.
@@ -251,10 +251,16 @@ let semantic_actions () =
                               | Symbol.N nt -> Nonterminal.(ocamltype nt, print false nt)
                           in
 
+                          let state_pat =
+                              if i = 0
+                                  then PVar "state"
+                                  else PWildcard
+                          in
+
                           let (bind, pats, expr) = match ty with
-                              | None -> ((PVar "state"), [], EVar "state")
+                              | None -> (state_pat, [], EVar "state")
                               | Some ty ->
-                                  ((PTup [PVar "state" ; PVar id]),
+                                  ((PTup [state_pat ; PVar id]),
                                    [PVar "data"],
                                    ETup [EVar "state" ; EVar "data"])
                           in
@@ -283,11 +289,17 @@ let semantic_actions () =
                  | _ -> failwith "all semantic actions should be textuals"
              in
 
+             let state_pat =
+                 if Array.length (Production.rhs r) = 0
+                     then PVar "state"
+                     else PWildcard
+             in
+
              IFn (
-                 false, (Format.sprintf "RULE_%d" (Production.p2i r)), {
+                 false, (Format.sprintf "rule_%d" (Production.p2i r)), {
                      generics = [] ;
                      self = SelfNone ;
-                     args = [(PVar "state", TUsize) ;
+                     args = [(state_pat, TUsize) ;
                              (PVar "stack",
                               TRefMut (TApp ("Vec", [TTup [TVar "usize" ;
                                                            TVar "YYType"]])))] ;
