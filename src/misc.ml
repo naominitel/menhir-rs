@@ -1,16 +1,3 @@
-(**************************************************************************)
-(*                                                                        *)
-(*  Menhir                                                                *)
-(*                                                                        *)
-(*  François Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann Régis-Gianas, PPS, Université Paris Diderot                      *)
-(*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
-(*                                                                        *)
-(**************************************************************************)
 
 let ( $$ ) x f = f x
 
@@ -66,23 +53,23 @@ let tabulateo number fold n f =
       let image = f element in
       begin match image with
       | Some _ ->
-	  incr c
+          incr c
       | None ->
-	  ()
+          ()
       end;
       image
     )
   in
   get, !c
 
-module IntSet = Set.Make (struct 
-			    type t = int
-			    let compare = ( - )
-			  end)
+module IntSet = Set.Make (struct
+                            type t = int
+                            let compare = ( - )
+                          end)
 
 type 'a iter = ('a -> unit) -> unit
 
-let separated_iter_to_string printer separator iter = 
+let separated_iter_to_string printer separator iter =
   let b = Buffer.create 32 in
   let first = ref true in
   iter (fun x ->
@@ -97,7 +84,7 @@ let separated_iter_to_string printer separator iter =
   );
   Buffer.contents b
 
-let separated_list_to_string printer separator xs = 
+let separated_list_to_string printer separator xs =
   separated_iter_to_string printer separator (fun f -> List.iter f xs)
 
 let terminated_iter_to_string printer terminator iter =
@@ -111,19 +98,19 @@ let terminated_iter_to_string printer terminator iter =
 let terminated_list_to_string printer terminator xs =
   terminated_iter_to_string printer terminator (fun f -> List.iter f xs)
 
-let index_map string_map = 
+let index_map string_map =
   let n = StringMap.cardinal string_map in
   let a = Array.make n None in
-  let conv, _ = StringMap.fold 
+  let conv, _ = StringMap.fold
     (fun k v (conv, idx) ->
        a.(idx) <- Some (k, v);
        StringMap.add k idx conv, idx + 1)
-    string_map (StringMap.empty, 0) 
+    string_map (StringMap.empty, 0)
   in
     ((fun n -> snd (unSome a.(n))),
      (fun k -> StringMap.find k conv),
      (fun n -> fst (unSome a.(n))))
-  
+
 let support_assoc l x =
   try
     List.assoc x l
@@ -144,9 +131,9 @@ let materialize (table : ('a, 'a option) Hashtbl.t) (x : 'a) : 'a list =
   let rec loop x =
     match Hashtbl.find table x with
     | None ->
-	[]
+        []
     | Some x ->
-	x :: loop x
+        x :: loop x
   in
   loop x
 
@@ -225,9 +212,9 @@ let rec smap f = function
       let x' = f x
       and xs' = smap f xs in
       if x == x' && xs == xs' then
-	l
+        l
       else
-	x' :: xs'
+        x' :: xs'
 
 let rec smapa f accu = function
   | [] ->
@@ -237,9 +224,9 @@ let rec smapa f accu = function
       let accu, xs' = smapa f accu xs in
       accu,
       if x == x' && xs == xs' then
-	l
+        l
       else
-	x' :: xs'
+        x' :: xs'
 
 let normalize s =
   let s = Bytes.of_string s in
@@ -249,9 +236,9 @@ let normalize s =
     | '('
     | ')'
     | ',' ->
-	Bytes.set s i '_'
+        Bytes.set s i '_'
     | _ ->
-	()
+        ()
   done;
   Bytes.unsafe_to_string s
 
@@ -263,7 +250,7 @@ let postincrement r =
   x
 
 (* [map_opt f l] returns the list of [y]s such that [f x = Some y] where [x]
-   is in [l], preserving the order of elements of [l]. *) 
+   is in [l], preserving the order of elements of [l]. *)
 let map_opt f l =
   List.(rev (fold_left (fun ys x ->
     match f x with

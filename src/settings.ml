@@ -1,17 +1,3 @@
-(**************************************************************************)
-(*                                                                        *)
-(*  Menhir                                                                *)
-(*                                                                        *)
-(*  François Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann Régis-Gianas, PPS, Université Paris Diderot                      *)
-(*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
-(*                                                                        *)
-(**************************************************************************)
-
 open Printf
 
 (* ------------------------------------------------------------------------- *)
@@ -49,7 +35,7 @@ let version =
 type construction_mode =
   | ModeCanonical     (* --canonical: canonical Knuth LR(1) automaton *)
   | ModeInclusionOnly (* --no-pager : states are merged when there is an inclusion
-			              relationship *)
+                                      relationship *)
   | ModePager         (* normal mode: states are merged as per Pager's criterion *)
   | ModeLALR          (* --lalr     : states are merged as in an LALR generator,
                                       i.e. as soon as they have the same LR(0) core *)
@@ -132,16 +118,16 @@ let logG, logA, logC =
 let timings =
   ref false
 
-let filenames = 
+let filenames =
   ref StringSet.empty
 
-let no_stdlib = 
+let no_stdlib =
   ref false
 
 let stdlib_path =
   ref Installation.libdir
 
-let insert name = 
+let insert name =
   filenames := StringSet.add name !filenames
 
 let interpret =
@@ -153,13 +139,13 @@ let interpret_show_cst =
 let interpret_error =
   ref false
 
-let table = 
+let table =
   ref false
 
 let inspection =
   ref false
 
-let coq = 
+let coq =
   ref false
 
 let coq_no_complete =
@@ -331,17 +317,17 @@ let () =
       ()
   | SuggestCompFlags ->
       if !table then
-	if Installation.ocamlfind then
-	  printf "-package menhirLib\n%!"
-	else
-	  printf "-I %s\n%!" Installation.libdir;
+        if Installation.ocamlfind then
+          printf "-package menhirLib\n%!"
+        else
+          printf "-I %s\n%!" Installation.libdir;
       exit 0
   | SuggestLinkFlags extension ->
       if !table then
-	if Installation.ocamlfind then
-	  printf "-linkpkg\n%!"
-	else
-	  printf "menhirLib.%s\n%!" extension;
+        if Installation.ocamlfind then
+          printf "-linkpkg\n%!"
+        else
+          printf "menhirLib.%s\n%!" extension;
       exit 0
   | SuggestWhereIsMenhirLibSource ->
       if Installation.ocamlfind then
@@ -357,7 +343,7 @@ let () =
 (* ------------------------------------------------------------------------- *)
 (* Export the settings. *)
 
-let stdlib_filename = 
+let stdlib_filename =
   !stdlib_path ^ "/standard.mly"
 
 let filenames =
@@ -369,20 +355,20 @@ let base =
   if !base = "" then
     match filenames with
     | [] ->
-	fprintf stderr "%s\n" usage;
-	exit 1
+        fprintf stderr "%s\n" usage;
+        exit 1
     | [ filename ] ->
-	Filename.chop_suffix filename file_ext
+	    Filename.chop_suffix filename file_ext
     | _ ->
-	fprintf stderr "Error: you must specify --base when providing multiple input files.\n";
-	exit 1
+        fprintf stderr "Error: you must specify --base when providing multiple input files.\n";
+        exit 1
   else
     !base
 
-let filenames = 
+let filenames =
   if !no_stdlib || !coq then
     filenames
-  else 
+  else
     stdlib_filename :: filenames
 
 let token_type_mode =
@@ -454,7 +440,7 @@ let interpret_show_cst =
 let interpret_error =
   !interpret_error
 
-let table = 
+let table =
   !table
 
 let inspection =
@@ -466,7 +452,7 @@ let () =
     exit 1
   end
 
-let coq = 
+let coq =
   !coq
 
 let coq_no_complete =

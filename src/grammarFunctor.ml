@@ -1,17 +1,3 @@
-(**************************************************************************)
-(*                                                                        *)
-(*  Menhir                                                                *)
-(*                                                                        *)
-(*  François Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann Régis-Gianas, PPS, Université Paris Diderot                      *)
-(*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
-(*                                                                        *)
-(**************************************************************************)
-
 open UnparameterizedSyntax
 open Syntax
 open Positions
@@ -56,14 +42,14 @@ module TokPrecedence = struct
   let levelip id properties =
     lazy (use id), properties.tk_precedence
 
-  let leveli id = 
+  let leveli id =
     let properties =
       try
-	StringMap.find id grammar.tokens
+        StringMap.find id grammar.tokens
       with Not_found ->
-	assert false (* well-formedness check has been performed earlier *)
+        assert false (* well-formedness check has been performed earlier *)
     in
-    levelip id properties    
+    levelip id properties
 
   (* This function prints warnings about useless precedence declarations
      for terminal symbols (%left, %right, %nonassoc). It should be invoked
@@ -72,12 +58,12 @@ module TokPrecedence = struct
   let diagnostics () =
     StringMap.iter (fun id properties ->
       if not (StringSet.mem id !ever_useful) then
-	match properties.tk_precedence with
-	| UndefinedPrecedence ->
-	    ()
-	| PrecedenceLevel (_, _, pos1, pos2) ->
-	    Error.grammar_warning (Positions.two pos1 pos2)
-	      "the precedence level assigned to %s is never useful." id
+        match properties.tk_precedence with
+        | UndefinedPrecedence ->
+            ()
+        | PrecedenceLevel (_, _, pos1, pos2) ->
+            Error.grammar_warning (Positions.two pos1 pos2)
+              "the precedence level assigned to %s is never useful." id
     ) grammar.tokens
 
 end
@@ -102,7 +88,7 @@ module Nonterminal = struct
 
   let original_nonterminals =
     nonterminals grammar
-  
+
   let start =
     List.length new_start_nonterminals
 
@@ -214,9 +200,9 @@ module Terminal = struct
     let tokens = tokens grammar in
     match tokens with
     | [] when verbose ->
-	Error.error [] "no tokens have been declared."
+        Error.error [] "no tokens have been declared."
     | _ ->
-	Misc.index ("error" :: tokens @ [ "#" ])
+        Misc.index ("error" :: tokens @ [ "#" ])
 
   let print tok =
     name.(tok)
@@ -236,23 +222,23 @@ module Terminal = struct
   let real t =
     error <> t && t <> sharp
 
-  let token_properties = 
+  let token_properties =
     let not_so_dummy_properties = (* applicable to [error] and [#] *)
       {
-	tk_filename      = "__primitives__";
-	tk_precedence    = UndefinedPrecedence;
-	tk_associativity = UndefinedAssoc;
-	tk_ocamltype     = None;
-	tk_is_declared   = true;
-	tk_position      = Positions.dummy;
+        tk_filename      = "__primitives__";
+        tk_precedence    = UndefinedPrecedence;
+        tk_associativity = UndefinedAssoc;
+        tk_ocamltype     = None;
+        tk_is_declared   = true;
+        tk_position      = Positions.dummy;
       }
     in
     Array.init n (fun tok ->
-      try 
-	 StringMap.find name.(tok) grammar.tokens 
+      try
+         StringMap.find name.(tok) grammar.tokens
        with Not_found ->
-	 assert (tok = sharp || tok = error);
-	 not_so_dummy_properties
+         assert (tok = sharp || tok = error);
+         not_so_dummy_properties
     )
 
   let () =
@@ -261,7 +247,7 @@ module Terminal = struct
         Printf.fprintf f "Grammar has %d terminal symbols.\n" (n - 2)
       )
 
-  let precedence_level tok = 
+  let precedence_level tok =
     TokPrecedence.levelip (print tok) token_properties.(tok)
 
   let associativity tok =
@@ -387,7 +373,7 @@ end
 
 module TerminalSet = struct
 
-  include CompressedBitSet 
+  include CompressedBitSet
 
   let print toks =
     Misc.separated_iter_to_string Terminal.print " " (fun f -> iter f toks)
@@ -429,13 +415,13 @@ module Symbol = struct
   let compare sym1 sym2 =
     match sym1, sym2 with
     | N nt1, N nt2 ->
-	Nonterminal.compare nt1 nt2
+        Nonterminal.compare nt1 nt2
     | T tok1, T tok2 ->
-	Terminal.compare tok1 tok2
+        Terminal.compare tok1 tok2
     | N _, T _ ->
-	1
+        1
     | T _, N _ ->
-	-1
+        -1
 
   let equal sym1 sym2 =
     compare sym1 sym2 = 0
@@ -443,24 +429,24 @@ module Symbol = struct
   let rec lequal syms1 syms2 =
     match syms1, syms2 with
     | [], [] ->
-	true
+        true
     | sym1 :: syms1, sym2 :: syms2 ->
-	equal sym1 sym2 && lequal syms1 syms2
+        equal sym1 sym2 && lequal syms1 syms2
     | _ :: _, []
     | [], _ :: _ ->
-	false
+        false
 
   let print = function
     | N nt ->
-	Nonterminal.print false nt
+        Nonterminal.print false nt
     | T tok ->
-	Terminal.print tok
+        Terminal.print tok
 
   let nonterminal = function
     | T _ ->
-	false
+        false
     | N _ ->
-	true
+        true
 
   (* Printing an array of symbols. [offset] is the start offset -- we
      print everything to its right. [dot] is the dot offset -- we
@@ -471,10 +457,10 @@ module Symbol = struct
     let length = Array.length symbols in
     for i = offset to length do
       if i = dot then
-	Buffer.add_string buffer ". ";
+        Buffer.add_string buffer ". ";
       if i < length then begin
-	Buffer.add_string buffer (print symbols.(i));
-	Buffer.add_char buffer ' '
+        Buffer.add_string buffer (print symbols.(i));
+        Buffer.add_char buffer ' '
       end
     done;
     Buffer.contents buffer
@@ -493,9 +479,9 @@ module Symbol = struct
       T (Terminal.lookup name)
     with Not_found ->
       try
-	N (Nonterminal.lookup name)
+        N (Nonterminal.lookup name)
       with Not_found ->
-	assert false (* well-formedness check has been performed earlier *)
+        assert false (* well-formedness check has been performed earlier *)
 
 end
 
@@ -599,10 +585,10 @@ module Production = struct
       NonterminalMap.add nt k startprods
     ) grammar.start_symbols (0, NonterminalMap.empty)
 
-  let prec_decl : symbol located option array = 
+  let prec_decl : symbol located option array =
     Array.make n None
 
-  let production_level : branch_production_level array = 
+  let production_level : branch_production_level array =
     (* The start productions should receive this dummy level, I suppose.
        We use a fresh mark, so a reduce/reduce conflict that involves a
        start production will not be solved. *)
@@ -638,9 +624,9 @@ module Production = struct
     let k, k' = ntprods.(nt) in
     let rec loop accu prod =
       if prod < k' then
-	loop (f prod accu) (prod + 1)
+        loop (f prod accu) (prod + 1)
       else
-	accu
+        accu
     in
     loop accu k
 
@@ -682,20 +668,20 @@ module Production = struct
     if is_start prod then
       match (rhs prod).(0) with
       | Symbol.N nt ->
-	  Some nt
+          Some nt
       | Symbol.T _ ->
-	  assert false
+          assert false
     else
       None
 
   let action prod =
     match actions.(prod) with
     | Some action ->
-	action
+        action
     | None ->
-	(* Start productions have no action. *)
-	assert (is_start prod);
-	assert false
+        (* Start productions have no action. *)
+        assert (is_start prod);
+        assert false
 
   let positions prod =
     positions.(prod)
@@ -803,9 +789,9 @@ module Production = struct
     Array.fold_left (fun accu symbol ->
       match symbol with
       | Symbol.T tok ->
-	  PRightmostToken tok
+          PRightmostToken tok
       | Symbol.N _ ->
-	  accu
+          accu
     ) PNone (rhs prod)
 
   let combine e1 e2 =
@@ -816,19 +802,19 @@ module Production = struct
     let oterminal =
       match prec_decl with
       | None ->
-	  rightmost_terminal prod
+          rightmost_terminal prod
       | Some { value = terminal } ->
-	  PPrecDecl terminal
+          PPrecDecl terminal
     in
     match oterminal with
     | PNone ->
-	fact1, UndefinedPrecedence
+        fact1, UndefinedPrecedence
     | PRightmostToken tok ->
-	let fact2, level = Terminal.precedence_level tok in
-	combine fact1 fact2, level
+        let fact2, level = Terminal.precedence_level tok in
+        combine fact1 fact2, level
     | PPrecDecl id ->
-	let fact2, level = TokPrecedence.leveli id  in
-	combine fact1 fact2, level
+        let fact2, level = TokPrecedence.leveli id  in
+        combine fact1 fact2, level
 
 end
 
@@ -866,7 +852,7 @@ module GenericAnalysis
 
     (* [terminal] maps a terminal symbol to a property. *)
     val terminal: Terminal.t -> property
-    
+
     (* [disjunction] abstracts a binary alternative. That is, when we analyze
        an alternative between several productions, we compute a property for
        each of them independently, then we combine these properties using
@@ -920,7 +906,7 @@ end = struct
         S.terminal tok
     | Symbol.N nt ->
         (* Recursive call to the analysis, via [get]. *)
-        get nt    
+        get nt
 
   (* Analysis of (a suffix of) a production [prod], starting at index [i]. *)
 
@@ -1190,19 +1176,19 @@ let tfollow : TerminalSet.t array Lazy.t =
     Array.iteri (fun prod (nt1, rhs) ->
       (* Iterate over all terminal symbols [t2] in the right-hand side. *)
       Array.iteri (fun i symbol ->
-	match symbol with
-	| Symbol.N _ ->
-	    ()
-	| Symbol.T t2 ->
+        match symbol with
+        | Symbol.N _ ->
+            ()
+        | Symbol.T t2 ->
             let nullable = NULLABLE.production prod (i+1)
             and first = FIRST.production prod (i+1) in
-	    (* The FIRST set of the remainder of the right-hand side
-	       contributes to the FOLLOW set of [t2]. *)
-	    tfollow.(t2) <- TerminalSet.union first tfollow.(t2);
-	    (* If the remainder of the right-hand side is nullable,
-	       FOLLOW(nt1) contributes to FOLLOW(t2). *)
-	    if nullable then
-	      tfollow.(t2) <- TerminalSet.union (follow nt1) tfollow.(t2)
+            (* The FIRST set of the remainder of the right-hand side
+               contributes to the FOLLOW set of [t2]. *)
+            tfollow.(t2) <- TerminalSet.union first tfollow.(t2);
+            (* If the remainder of the right-hand side is nullable,
+               FOLLOW(nt1) contributes to FOLLOW(t2). *)
+            if nullable then
+              tfollow.(t2) <- TerminalSet.union (follow nt1) tfollow.(t2)
       ) rhs
     ) Production.table;
 
@@ -1301,19 +1287,19 @@ let explain (tok : Terminal.t) (rhs : Symbol.t array) (i : int) =
     let symbol = rhs.(i) in
     match symbol with
     | Symbol.T tok' ->
-	assert (Terminal.equal tok tok');
-	EObvious
+        assert (Terminal.equal tok tok');
+        EObvious
     | Symbol.N nt ->
-	if TerminalSet.mem tok (FIRST.nonterminal nt) then
-	  EFirst (tok, nt)
-	else begin
-	  assert (NULLABLE.nonterminal nt);
-	  match loop (i + 1) with
-	  | ENullable (symbols, e) ->
-	      ENullable (symbol :: symbols, e)
-	  | e ->
-	      ENullable ([ symbol ], e)
-	end
+        if TerminalSet.mem tok (FIRST.nonterminal nt) then
+          EFirst (tok, nt)
+        else begin
+          assert (NULLABLE.nonterminal nt);
+          match loop (i + 1) with
+          | ENullable (symbols, e) ->
+              ENullable (symbol :: symbols, e)
+          | e ->
+              ENullable ([ symbol ], e)
+        end
   in
   loop i
 
@@ -1322,14 +1308,14 @@ let rec convert = function
       ""
   | EFirst (tok, nt) ->
       Printf.sprintf "%s can begin with %s"
-	(Nonterminal.print false nt)
-	(Terminal.print tok)
+        (Nonterminal.print false nt)
+        (Terminal.print tok)
   | ENullable (symbols, e) ->
       let e = convert e in
       Printf.sprintf "%scan vanish%s%s"
-	(Symbol.printl symbols)
-	(if e = "" then "" else " and ")
-	e
+        (Symbol.printl symbols)
+        (if e = "" then "" else " and ")
+        e
 
 (* ------------------------------------------------------------------------ *)
 (* Package the analysis results. *)
@@ -1387,94 +1373,94 @@ module Precedence = struct
 
   type order = Lt | Gt | Eq | Ic
 
-  let precedence_order p1 p2 = 
+  let precedence_order p1 p2 =
     match p1, p2 with
-      |	UndefinedPrecedence, _
-      | _, UndefinedPrecedence -> 
-	  Ic
+      | UndefinedPrecedence, _
+      | _, UndefinedPrecedence ->
+          Ic
       | PrecedenceLevel (m1, l1, _, _), PrecedenceLevel (m2, l2, _, _) ->
-	  if not (Mark.same m1 m2) then
-	    Ic
-	  else
-	    if l1 > l2 then 
-	      Gt 
-	    else if l1 < l2 then 
-	      Lt
-	    else 
-	      Eq
+          if not (Mark.same m1 m2) then
+            Ic
+          else
+            if l1 > l2 then
+              Gt
+            else if l1 < l2 then
+              Lt
+            else
+              Eq
 
   let production_order p1 p2 =
     match p1, p2 with
       | ProductionLevel (m1, l1), ProductionLevel (m2, l2) ->
-	  if not (Mark.same m1 m2) then
-	    Ic
-	  else
-	    if l1 > l2 then 
-	      Gt 
-	    else if l1 < l2 then 
-	      Lt
-	    else 
-	      Eq
+          if not (Mark.same m1 m2) then
+            Ic
+          else
+            if l1 > l2 then
+              Gt
+            else if l1 < l2 then
+              Lt
+            else
+              Eq
 
   let shift_reduce tok prod =
     let fact1, tokp  = Terminal.precedence_level tok
     and fact2, prodp = Production.precedence prod in
     match precedence_order tokp prodp with
-   
+
       (* Our information is inconclusive. Drop [fact1] and [fact2],
-	 that is, do not record that this information was useful. *)
+         that is, do not record that this information was useful. *)
 
     | Ic ->
-	DontKnow
+        DontKnow
 
       (* Our information is useful. Record that fact by evaluating
-	 [fact1] and [fact2]. *)
+         [fact1] and [fact2]. *)
 
     | (Eq | Lt | Gt) as c ->
-	Lazy.force fact1;
-	Lazy.force fact2;
-	match c with
+        Lazy.force fact1;
+        Lazy.force fact2;
+        match c with
 
-	| Ic ->
-	    assert false (* already dispatched *)
+        | Ic ->
+            assert false (* already dispatched *)
 
-	| Eq -> 
-	    begin
-	      match Terminal.associativity tok with
-	      | LeftAssoc  -> ChooseReduce
-	      | RightAssoc -> ChooseShift
-	      | NonAssoc   -> ChooseNeither
-	      | _          -> assert false
-			      (* If [tok]'s precedence level is defined, then
-				 its associativity must be defined as well. *)
-	    end
+        | Eq ->
+            begin
+              match Terminal.associativity tok with
+              | LeftAssoc  -> ChooseReduce
+              | RightAssoc -> ChooseShift
+              | NonAssoc   -> ChooseNeither
+              | _          -> assert false
+                              (* If [tok]'s precedence level is defined, then
+                                 its associativity must be defined as well. *)
+            end
 
-	| Lt ->
-	    ChooseReduce
+        | Lt ->
+            ChooseReduce
 
-	| Gt ->
-	    ChooseShift
+        | Gt ->
+            ChooseShift
 
 
   let reduce_reduce prod1 prod2 =
-    let pl1 = Production.production_level.(prod1) 
+    let pl1 = Production.production_level.(prod1)
     and pl2 = Production.production_level.(prod2) in
     match production_order pl1 pl2 with
-    | Lt -> 
-	Some prod1
-    | Gt -> 
-	Some prod2
-    | Eq -> 
+    | Lt ->
+        Some prod1
+    | Gt ->
+        Some prod2
+    | Eq ->
         (* The order is strict except in the presence of parameterized
            non-terminals and/or inlining. Two productions can have the same
            precedence level if they originate, via macro-expansion or via
            inlining, from a single production in the source grammar. *)
         None
-    | Ic -> 
+    | Ic ->
         None
 
 end
-  
+
 (* This function prints warnings about useless precedence declarations for
    terminal symbols (%left, %right, %nonassoc) and productions (%prec). It
    should be invoked after only the automaton has been constructed. *)

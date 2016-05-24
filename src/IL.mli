@@ -1,17 +1,3 @@
-(**************************************************************************)
-(*                                                                        *)
-(*  Menhir                                                                *)
-(*                                                                        *)
-(*  François Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann Régis-Gianas, PPS, Université Paris Diderot                      *)
-(*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
-(*                                                                        *)
-(**************************************************************************)
-
 (* Abstract syntax of the language used for code production. *)
 
 type interface =
@@ -68,7 +54,7 @@ and typedef = {
     (* Constraint. *)
     typeconstraint: (typ * typ) option
 
-  } 
+  }
 
 and typedefrhs =
   | TDefRecord of fielddef list
@@ -86,7 +72,7 @@ and fielddef = {
     (* Type of the field. *)
     fieldtype: typescheme
 
-  }  
+  }
 
 and datadef = {
 
@@ -100,10 +86,10 @@ and datadef = {
        [None] if this is an ordinary ADT. *)
     datatypeparams: typ list option;
 
-  } 
+  }
 
 and typ =
-  
+
   (* Textual OCaml type. *)
   | TypTextual of Stretch.ocamltype
 
@@ -127,7 +113,7 @@ and typescheme = {
   (* Body. *)
   body: typ;
 
-  } 
+  }
 
 and valdef = {
 
@@ -143,7 +129,7 @@ and valdef = {
   (* Value to which it is bound. *)
   valval: expr
 
-  } 
+  }
 
 and expr =
 
@@ -211,7 +197,7 @@ and branch = {
   (* Branch body. *)
   branchbody: expr;
 
-  } 
+  }
 
 and pattern =
 

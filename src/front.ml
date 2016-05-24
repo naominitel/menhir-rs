@@ -1,17 +1,3 @@
-(**************************************************************************)
-(*                                                                        *)
-(*  Menhir                                                                *)
-(*                                                                        *)
-(*  François Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann Régis-Gianas, PPS, Université Paris Diderot                      *)
-(*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
-(*                                                                        *)
-(**************************************************************************)
-
 (* The front-end. This module performs a series of toplevel side effects. *)
 
 (* ------------------------------------------------------------------------- *)
@@ -44,7 +30,7 @@ let load_partial_grammar filename =
 
 (* Read all of the grammar files that are named on the command line. *)
 
-let partial_grammars = 
+let partial_grammars =
   List.map load_partial_grammar Settings.filenames
 
 let () =
@@ -54,7 +40,7 @@ let () =
 
 (* If several grammar files were specified, merge them. *)
 
-let parameterized_grammar = 
+let parameterized_grammar =
   PartialGrammar.join_partial_grammars partial_grammars
 
 (* ------------------------------------------------------------------------- *)
@@ -62,7 +48,7 @@ let parameterized_grammar =
 (* Expand away all applications of parameterized nonterminal symbols, so as to
    obtain a grammar without parameterized nonterminal symbols. *)
 
-let grammar = 
+let grammar =
   ParameterizedGrammar.expand parameterized_grammar
 
 let () =
@@ -152,17 +138,17 @@ let grammar =
 
 let grammar =
   if Settings.inline then begin
-    let grammar, inlined = 
+    let grammar, inlined =
       NonTerminalDefinitionInlining.inline grammar
     in
     if not Settings.infer && inlined && not skipping_parser_generation then
       Error.warning []
-	"you are using the standard library and/or the %%inline keyword. We\n\
-	 recommend switching on --infer in order to avoid obscure type error messages.";
+        "you are using the standard library and/or the %%inline keyword. We\n\
+         recommend switching on --infer in order to avoid obscure type error messages.";
     Time.tick "Inlining";
     grammar
   end
-  else 
+  else
     grammar
 
 (* ------------------------------------------------------------------------- *)

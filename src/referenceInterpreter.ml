@@ -1,17 +1,3 @@
-(**************************************************************************)
-(*                                                                        *)
-(*  Menhir                                                                *)
-(*                                                                        *)
-(*  François Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann Régis-Gianas, PPS, Université Paris Diderot                      *)
-(*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
-(*                                                                        *)
-(**************************************************************************)
-
 open Grammar
 open Cst
 
@@ -27,7 +13,7 @@ module T = struct
 
   let number =
     Lr1.number
-   
+
   type token =
       Terminal.t
 
@@ -55,9 +41,9 @@ module T = struct
   let default_reduction (s : state) defred nodefred env =
     match Invariant.has_default_reduction s with
     | Some (prod, _) ->
-	defred env prod
+        defred env prod
     | None ->
-	nodefred env
+        nodefred env
 
   let action (s : state) (tok : terminal) value shift reduce fail env =
 
@@ -68,27 +54,27 @@ module T = struct
       let s' : state = SymbolMap.find (Symbol.T tok) (Lr1.transitions s) in
 
       (* There is such a transition. Return either [ShiftDiscard] or
-	 [ShiftNoDiscard], depending on the existence of a default
-	 reduction on [#] at [s']. *)
+         [ShiftNoDiscard], depending on the existence of a default
+         reduction on [#] at [s']. *)
 
       match Invariant.has_default_reduction s' with
       | Some (_, toks) when TerminalSet.mem Terminal.sharp toks ->
-	  shift env false tok value s'
+          shift env false tok value s'
       | _ ->
-	  shift env true tok value s'
-	  
+          shift env true tok value s'
+
     (* There is no such transition. Look for a reduction. *)
 
     with Not_found ->
       try
 
-	let prod = Misc.single (TerminalMap.find tok (Lr1.reductions s)) in
-	reduce env prod
+        let prod = Misc.single (TerminalMap.find tok (Lr1.reductions s)) in
+        reduce env prod
 
       (* There is no reduction either. Fail. *)
 
       with Not_found ->
-	fail env
+        fail env
 
   let goto (s : state) (prod : production) : state =
     try
@@ -114,7 +100,7 @@ module T = struct
       assert (not (Production.is_start prod));
 
       (* Reduce. Pop a suffix of the stack, and use it to construct a
-	 new concrete syntax tree node. *)
+         new concrete syntax tree node. *)
 
       let n = Production.length prod in
 

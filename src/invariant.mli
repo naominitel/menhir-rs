@@ -1,17 +1,3 @@
-(**************************************************************************)
-(*                                                                        *)
-(*  Menhir                                                                *)
-(*                                                                        *)
-(*  François Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann Régis-Gianas, PPS, Université Paris Diderot                      *)
-(*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
-(*                                                                        *)
-(**************************************************************************)
-
 (* This module discovers and publishes information about the
    automaton.
 
@@ -37,7 +23,7 @@ type word
 
 (* [fold] folds over a word. At each cell, [f] is applied to the
    accumulator, to a Boolean flag that tells whether the cell holds a
-   state, to the set of possible states of the cell, and to the symbol 
+   state, to the set of possible states of the cell, and to the symbol
    associated with the cell. The stack is visited from bottom to top. *)
 
 val fold: ('a -> bool -> Symbol.t -> Lr1.NodeSet.t -> 'a) -> 'a -> word -> 'a

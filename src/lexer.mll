@@ -1,17 +1,3 @@
-(**************************************************************************)
-(*                                                                        *)
-(*  Menhir                                                                *)
-(*                                                                        *)
-(*  François Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann Régis-Gianas, PPS, Université Paris Diderot                      *)
-(*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
-(*                                                                        *)
-(**************************************************************************)
-
 {
 
 open Lexing
@@ -231,7 +217,7 @@ let no_monsters monsters =
 
 (* Creates a stretch. *)
 
-let mk_stretch pos1 pos2 parenthesize monsters = 
+let mk_stretch pos1 pos2 parenthesize monsters =
   (* Read the specified chunk of the file. *)
   let ofs1 = pos1.pos_cnum
   and ofs2 = pos2.pos_cnum in
@@ -347,7 +333,7 @@ let uppercase = ['A'-'Z' '\192'-'\214' '\216'-'\222']
 
 let identchar = ['A'-'Z' 'a'-'z' '_' '\192'-'\214' '\216'-'\246' '\248'-'\255' '0'-'9'] (* '\'' forbidden *)
 
-let poskeyword = 
+let poskeyword =
   '$'
   (("symbolstart" | "start" | "end") as where)
   (("pos" | "ofs") as flavor)
@@ -420,7 +406,7 @@ rule main = parse
     { if Hashtbl.mem reserved id then
         error2 lexbuf "this is an OCaml reserved word."
       else
-	LID (with_pos (cpos lexbuf) id)
+        LID (with_pos (cpos lexbuf) id)
     }
 | (uppercase identchar *) as id
     { UID (with_pos (cpos lexbuf) id) }
@@ -447,11 +433,11 @@ rule main = parse
         let openingpos = lexeme_end_p lexbuf in
         let closingpos, monsters = action false openingpos [] lexbuf in
         ACTION (
-	  fun (producers : string option array) ->
+          fun (producers : string option array) ->
             List.iter (fun monster -> monster.check producers) monsters;
-	    let stretch = mk_stretch openingpos closingpos true monsters in
-	    Action.from_stretch stretch
-	)
+            let stretch = mk_stretch openingpos closingpos true monsters in
+            Action.from_stretch stretch
+        )
       ) }
 | eof
     { EOF }
@@ -508,11 +494,11 @@ and action percent openingpos monsters = parse
     { match percent, delimiter with
       | true, "%}"
       | false, "}" ->
-	  (* This is the delimiter we were instructed to look for. *)
-	  lexeme_start_p lexbuf, monsters
+          (* This is the delimiter we were instructed to look for. *)
+          lexeme_start_p lexbuf, monsters
       | _, _ ->
-	  (* This is not it. *)
-	  error1 openingpos "unbalanced opening brace."
+          (* This is not it. *)
+          error1 openingpos "unbalanced opening brace."
     }
 | '('
     { let _, monsters = parentheses (lexeme_end_p lexbuf) monsters lexbuf in
@@ -611,7 +597,7 @@ and ocamlcomment openingpos = parse
 (* Skip O'Caml strings. *)
 
 and string openingpos = parse
-| '"' 
+| '"'
    { () }
 | '\\' newline
 | newline
@@ -620,7 +606,7 @@ and string openingpos = parse
    (* Upon finding a backslash, skip the character that follows,
       unless it is a newline. Pretty crude, but should work. *)
    { string openingpos lexbuf }
-| eof 
+| eof
    { error1 openingpos "unterminated OCaml string." }
 | _
    { string openingpos lexbuf }
@@ -639,7 +625,7 @@ and char = parse
 | '\\' ['0'-'9'] ['0'-'9'] ['0'-'9'] "'"
 | '\\' 'x' ['0'-'9' 'a'-'f' 'A'-'F'] ['0'-'9' 'a'-'f' 'A'-'F'] "'"
 | ""
-   { () } 
+   { () }
 
 (* ------------------------------------------------------------------------ *)
 

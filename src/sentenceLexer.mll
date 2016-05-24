@@ -1,17 +1,3 @@
-(**************************************************************************)
-(*                                                                        *)
-(*  Menhir                                                                *)
-(*                                                                        *)
-(*  François Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann Régis-Gianas, PPS, Université Paris Diderot                      *)
-(*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
-(*                                                                        *)
-(**************************************************************************)
-
 (* This lexer is used to read the sentences provided on the standard input
    channel when [--interpret] is enabled. *)
 
@@ -49,21 +35,21 @@ rule lex = parse
      non-terminal symbol. It should be a start symbol. *)
   | (lowercase identchar *) as lid
       { try
-	  let nt = Nonterminal.lookup lid in
-	  if StringSet.mem lid Front.grammar.UnparameterizedSyntax.start_symbols then
-	    NONTERMINAL (nt, lexbuf.lex_start_p, lexbuf.lex_curr_p)
-	  else
-	    error2 lexbuf "\"%s\" is not a start symbol." lid
-	with Not_found ->
-	  error2 lexbuf "\"%s\" is not a known non-terminal symbol." lid
+          let nt = Nonterminal.lookup lid in
+          if StringSet.mem lid Front.grammar.UnparameterizedSyntax.start_symbols then
+            NONTERMINAL (nt, lexbuf.lex_start_p, lexbuf.lex_curr_p)
+          else
+            error2 lexbuf "\"%s\" is not a start symbol." lid
+        with Not_found ->
+          error2 lexbuf "\"%s\" is not a known non-terminal symbol." lid
       }
   (* An identifier that begins with an uppercase letter is considered a
      terminal symbol. *)
   | (uppercase identchar *) as uid
       { try
-	  TERMINAL (Terminal.lookup uid, lexbuf.lex_start_p, lexbuf.lex_curr_p)
-	with Not_found ->
-	  error2 lexbuf "\"%s\" is not a known terminal symbol." uid
+          TERMINAL (Terminal.lookup uid, lexbuf.lex_start_p, lexbuf.lex_curr_p)
+        with Not_found ->
+          error2 lexbuf "\"%s\" is not a known terminal symbol." uid
       }
   (* Whitespace is ignored. *)
   | whitespace

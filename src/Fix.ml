@@ -1,14 +1,13 @@
 (**************************************************************************)
 (*                                                                        *)
-(*  Menhir                                                                *)
+(*  Fix                                                                   *)
 (*                                                                        *)
-(*  François Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann Régis-Gianas, PPS, Université Paris Diderot                      *)
+(*  Author:  Fran�ois Pottier, INRIA Paris-Rocquencourt                   *)
+(*  Version: 20101206                                                     *)
 (*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
+(*  The copyright to this code is held by Institut National de Recherche  *)
+(*  en Informatique et en Automatique (INRIA). All rights reserved. This  *)
+(*  file is distributed under the license CeCILL-C (see file LICENSE).    *)
 (*                                                                        *)
 (**************************************************************************)
 
@@ -198,16 +197,16 @@ end
     assert (src.outgoing = []);
     let rec loop = function
       | [] ->
-	  ()
+          ()
       | dst :: dsts ->
-	  if dst.marked then
-	    loop dsts (* skip duplicate elements *)
-	  else begin
-	    dst.marked <- true;
-	    link src dst;
-	    loop dsts;
-	    dst.marked <- false
-	  end
+          if dst.marked then
+            loop dsts (* skip duplicate elements *)
+          else begin
+            dst.marked <- true;
+            link src dst;
+            loop dsts;
+            dst.marked <- false
+          end
     in
     loop dsts
 
@@ -297,7 +296,7 @@ module Workset : sig
 
   (* [insert node] inserts [node] into the workset. [node] must have no
      successors. *)
-  val insert: node -> unit  
+  val insert: node -> unit
 
   (* [repeat f] repeatedly applies [f] to a node extracted out of the
      workset, until the workset becomes empty. [f] is allowed to use
@@ -305,7 +304,7 @@ module Workset : sig
   val repeat: (node -> unit) -> unit
 
   (* That's it! *)
-end 
+end
 = struct
 
   (* Initialize the workset. *)

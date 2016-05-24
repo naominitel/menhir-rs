@@ -1,17 +1,3 @@
-(**************************************************************************)
-(*                                                                        *)
-(*  Menhir                                                                *)
-(*                                                                        *)
-(*  François Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann Régis-Gianas, PPS, Université Paris Diderot                      *)
-(*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
-(*                                                                        *)
-(**************************************************************************)
-
 (* The functor [Make] transforms an abstract syntax tree for the grammar into a
    rich internal representation of the grammar. *)
 
@@ -95,7 +81,7 @@ module Nonterminal : sig
   (* Iteration over all nonterminals, except the start nonterminals. *)
 
   val iterx: (t -> unit) -> unit
-  val foldx: (t -> 'a -> 'a) -> 'a -> 'a 
+  val foldx: (t -> 'a -> 'a) -> 'a -> 'a
 
   (* Tabulation of a function over nonterminals. *)
 

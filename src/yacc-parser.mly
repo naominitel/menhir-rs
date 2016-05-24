@@ -1,17 +1,3 @@
-/**************************************************************************/
-/*                                                                        */
-/*  Menhir                                                                */
-/*                                                                        */
-/*  François Pottier, INRIA Paris-Rocquencourt                            */
-/*  Yann Régis-Gianas, PPS, Université Paris Diderot                      */
-/*                                                                        */
-/*  Copyright 2005-2015 Institut National de Recherche en Informatique    */
-/*  et en Automatique. All rights reserved. This file is distributed      */
-/*  under the terms of the Q Public License version 1.0, with the change  */
-/*  described in file LICENSE.                                            */
-/*                                                                        */
-/**************************************************************************/
-
 /* This is the crude version of the parser. It is meant to be processed
    by ocamlyacc. Its existence is necessary for bootstrapping. It is kept
    in sync with [fancy-parser], with a few differences:
@@ -27,9 +13,9 @@ open Positions
 
 %}
 
-%token TOKEN TYPE LEFT RIGHT NONASSOC START PREC PUBLIC COLON BAR EOF EQUAL 
+%token TOKEN TYPE LEFT RIGHT NONASSOC START PREC PUBLIC COLON BAR EOF EQUAL
 %token INLINE LPAREN RPAREN COMMA QUESTION STAR PLUS PARAMETER ON_ERROR_REDUCE
-%token <string Positions.located> LID UID 
+%token <string Positions.located> LID UID
 %token <Stretch.t> HEADER
 %token <Stretch.ocamltype> OCAMLTYPE
 %token <Stretch.t Lazy.t> PERCENTPERCENT
@@ -55,12 +41,12 @@ open Positions
 
 grammar:
   declarations PERCENTPERCENT rules trailer
-    { 
-      { 
-	pg_filename          = ""; (* filled in by the caller *)
-	pg_declarations      = List.rev $1;
-	pg_rules	     = $3;
-	pg_trailer           = $4 
+    {
+      {
+        pg_filename          = ""; (* filled in by the caller *)
+        pg_declarations      = List.rev $1;
+        pg_rules             = $3;
+        pg_trailer           = $4
       }
     }
 
@@ -96,7 +82,7 @@ declaration:
 
 | START OCAMLTYPE nonterminals
     /* %start <ocamltype> foo is syntactic sugar for %start foo %type <ocamltype> foo */
-    { Misc.mapd (fun ntloc -> 
+    { Misc.mapd (fun ntloc ->
         Positions.mapd (fun nt -> DStart nt, DType ($2, ParameterVar ntloc)) ntloc) $3 }
 
 | priority_keyword symbols
@@ -186,12 +172,12 @@ rule:
   production_group production_groups
     {
       let public, inline = $1 in
-      { pr_public_flag = public; 
-	pr_inline_flag = inline;
-	pr_nt          = Positions.value $2;
-	pr_positions   = [ Positions.position $2 ];
-	pr_parameters  = $3;
-	pr_branches    = List.flatten ($6 :: List.rev $7)
+      { pr_public_flag = public;
+        pr_inline_flag = inline;
+        pr_nt          = Positions.value $2;
+        pr_positions   = [ Positions.position $2 ];
+        pr_parameters  = $3;
+        pr_branches    = List.flatten ($6 :: List.rev $7)
       }
     }
 
@@ -232,7 +218,7 @@ optional_actuals:
     { $2 }
 
 actuals_comma:
-  actual 
+  actual
     { [ $1 ] }
 | actual COMMA actuals_comma
     { $1 :: $3 }
@@ -291,13 +277,13 @@ production_group:
         (* Distribute the semantic action. Also, check that every [$i]
            is within bounds. *)
         let pr_action = action (ParserAux.producer_names producers) in
-	{
-	  pr_producers;
-	  pr_action;
-	  pr_branch_prec_annotation   = ParserAux.override pos oprec1 oprec2;
-	  pr_branch_production_level  = level;
-	  pr_branch_position          = pos
-	})
+        {
+          pr_producers;
+          pr_action;
+          pr_branch_prec_annotation   = ParserAux.override pos oprec1 oprec2;
+          pr_branch_production_level  = level;
+          pr_branch_position          = pos
+        })
       productions
     }
 
@@ -333,7 +319,7 @@ production:
     }
 
 producers:
-  /* epsilon */ 
+  /* epsilon */
     { [] }
 | producers producer
     { $2 :: $1 }

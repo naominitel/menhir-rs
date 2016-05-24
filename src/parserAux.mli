@@ -1,17 +1,3 @@
-(**************************************************************************)
-(*                                                                        *)
-(*  Menhir                                                                *)
-(*                                                                        *)
-(*  François Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann Régis-Gianas, PPS, Université Paris Diderot                      *)
-(*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
-(*                                                                        *)
-(**************************************************************************)
-
 (* This module provides utilities that are shared by the two versions
    of the parser. *)
 
@@ -50,7 +36,7 @@ val check_production_group:
    A missing identifier in the [i]-th position receives the conventional
    name [_i]. *)
 
-val normalize_producers: 
+val normalize_producers:
   (Positions.t * identifier Positions.located option * parameter) list ->
   producer list
 

@@ -1,3 +1,19 @@
+2016/05/04:
+In the Coq backend, split the largest definitions into smaller
+ones. This circumvenents a limitation of vm_compute on 32 bit
+machines. This also enables us to perform sharing between
+definitions, so that the generated files are much smaller.
+
+2016/04/10:
+When printing a grammar (which is done by the --only-preprocess options),
+remove the leading bar '|', for compatibility with yacc and bison.
+
+2016/03/11:
+In the code back-end, generate type annotations when extracting a semantic
+value out of the stack. When working with a semantic value of some function
+type, OCaml would incorrectly warn that this function does not use its
+argument. This warning should now be gone.
+
 2016/03/03:
 Makefile changes, so as to support ocamlbuild 4.03, which seems to have
 stricter hygiene rules than previous versions.
@@ -428,4 +444,3 @@ Fixed behavior of --depend option.
 
 2006/01/06:
 Removed reversed lists from the standard library.
-

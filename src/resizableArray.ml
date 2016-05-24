@@ -1,17 +1,3 @@
-(**************************************************************************)
-(*                                                                        *)
-(*  Menhir                                                                *)
-(*                                                                        *)
-(*  François Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann Régis-Gianas, PPS, Université Paris Diderot                      *)
-(*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
-(*                                                                        *)
-(**************************************************************************)
-
 (* This module implements resizable arrays, that is, arrays that can
    grow upon explicit request. *)
 
@@ -26,7 +12,7 @@ type 'a t = {
     mutable size: int;
     (* The physical array, whose length is at least [size]. *)
     mutable table: 'a array
-  } 
+  }
 
 let make capacity default init =
   (* [capacity] must be nonzero, so that doubling it actually

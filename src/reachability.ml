@@ -1,17 +1,3 @@
-(**************************************************************************)
-(*                                                                        *)
-(*  Menhir                                                                *)
-(*                                                                        *)
-(*  François Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann Régis-Gianas, PPS, Université Paris Diderot                      *)
-(*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
-(*                                                                        *)
-(**************************************************************************)
-
 open UnparameterizedSyntax
 
 let rec visit grammar visited symbol =
@@ -39,15 +25,15 @@ let trim grammar =
   else
     let reachable =
       StringSet.fold (fun symbol visited ->
-	visit grammar visited symbol
-      ) grammar.start_symbols StringSet.empty 
+        visit grammar visited symbol
+      ) grammar.start_symbols StringSet.empty
     in
     StringMap.iter (fun symbol rule ->
       if not (StringSet.mem symbol reachable) then
-	Error.grammar_warning
-	  rule.positions
-	     "symbol %s is unreachable from any of the start symbol(s)."
-	       symbol
+        Error.grammar_warning
+          rule.positions
+             "symbol %s is unreachable from any of the start symbol(s)."
+               symbol
     ) grammar.rules;
     { grammar with rules = StringMap.restrict reachable grammar.rules }
 

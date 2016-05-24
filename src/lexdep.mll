@@ -1,17 +1,3 @@
-(**************************************************************************)
-(*                                                                        *)
-(*  Menhir                                                                *)
-(*                                                                        *)
-(*  François Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann Régis-Gianas, PPS, Université Paris Diderot                      *)
-(*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
-(*                                                                        *)
-(**************************************************************************)
-
 (* This code analyzes the output of [ocamldep] and returns the list
    of [.cmi] files that the [.cmo] file depends on. *)
 
@@ -24,8 +10,8 @@
   let fail lexbuf =
     raise (Error
       (Printf.sprintf
-	 "failed to make sense of ocamldep's output (character %d).\n"
-	 lexbuf.lex_curr_p.pos_cnum)
+         "failed to make sense of ocamldep's output (character %d).\n"
+         lexbuf.lex_curr_p.pos_cnum)
     )
 
 }

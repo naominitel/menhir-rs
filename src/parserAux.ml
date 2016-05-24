@@ -1,17 +1,3 @@
-(**************************************************************************)
-(*                                                                        *)
-(*  Menhir                                                                *)
-(*                                                                        *)
-(*  François Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann Régis-Gianas, PPS, Université Paris Diderot                      *)
-(*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
-(*                                                                        *)
-(**************************************************************************)
-
 open Positions
 open Syntax
 
@@ -43,23 +29,23 @@ let check_production_group right_hand_sides =
   begin
     match right_hand_sides with
     | [] ->
-	assert false
+        assert false
     | (producers, _, _, _) :: right_hand_sides ->
-	let ids = defined_identifiers producers in
-	List.iter (fun (producers, _, _, _) ->
-	  let ids' = defined_identifiers producers in
-	  try
-	    let id =
-	      IdSet.choose (IdSet.union
-				  (IdSet.diff ids ids')
-				  (IdSet.diff ids' ids))
-	    in
-	    Error.error [Positions.position id]
-	      "two productions that share a semantic action must define\n\
-	       exactly the same identifiers."
-	  with Not_found ->
-	    ()
-	  ) right_hand_sides
+        let ids = defined_identifiers producers in
+        List.iter (fun (producers, _, _, _) ->
+          let ids' = defined_identifiers producers in
+          try
+            let id =
+              IdSet.choose (IdSet.union
+                                  (IdSet.diff ids ids')
+                                  (IdSet.diff ids' ids))
+            in
+            Error.error [Positions.position id]
+              "two productions that share a semantic action must define\n\
+               exactly the same identifiers."
+          with Not_found ->
+            ()
+          ) right_hand_sides
   end
 
 (* [normalize_producer i p] assigns a name of the form [_i]
@@ -103,7 +89,7 @@ let anonymous pos branches =
   let symbol = fresh() in
   (* Construct its definition. Note that it is implicitly marked %inline. *)
   let rule = {
-    pr_public_flag = false; 
+    pr_public_flag = false;
     pr_inline_flag = true;
     pr_nt          = symbol;
     pr_positions   = [ pos ]; (* this list is not allowed to be empty *)

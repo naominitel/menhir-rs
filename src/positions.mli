@@ -1,17 +1,3 @@
-(**************************************************************************)
-(*                                                                        *)
-(*  Menhir                                                                *)
-(*                                                                        *)
-(*  FranÃ§ois Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann RÃ©gis-Gianas, PPS, UniversitÃ© Paris Diderot                      *)
-(*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
-(*                                                                        *)
-(**************************************************************************)
-
 (* TEMPORARY faire un peu le ménage dans cette interface pléthorique? *)
 
 (** Extension of standard library's positions. *)
@@ -58,16 +44,16 @@ val dummy: t
 
 (** {2 Accessors} *)
 
-(** [column p] returns the number of characters from the 
+(** [column p] returns the number of characters from the
     beginning of the line of the Lexing.position [p]. *)
 val column : Lexing.position -> int
 
 (** [column p] returns the line number of to the Lexing.position [p]. *)
 val line : Lexing.position -> int
 
-(** [characters p1 p2] returns the character interval 
+(** [characters p1 p2] returns the character interval
     between [p1] and [p2] assuming they are located in the same
-    line. 
+    line.
 *)
 val characters : Lexing.position -> Lexing.position -> int * int
 
@@ -75,7 +61,7 @@ val start_of_position: t -> Lexing.position
 
 val end_of_position: t -> Lexing.position
 
-val filename_of_position: t -> string 
+val filename_of_position: t -> string
 
 (** {2 Position handling} *)
 
@@ -91,9 +77,9 @@ val joinf : ('a -> t) -> 'a -> 'a -> t
 
 val join_located : 'a located -> 'b located -> ('a -> 'b -> 'c) -> 'c located
 
-val join_located_list : 
+val join_located_list :
   ('a located) list -> ('a list -> 'b list) -> ('b list) located
-  
+
 
 (** [string_of_lex_pos p] returns a string representation for
     the lexing position [p]. *)
@@ -112,7 +98,7 @@ val pos_or_undef : t option -> t
 (** [cpos lexbuf] returns the current position of the lexer. *)
 val cpos : Lexing.lexbuf -> t
 
-(** [string_of_cpos p] returns a string representation of 
+(** [string_of_cpos p] returns a string representation of
     the lexer's current position. *)
 val string_of_cpos : Lexing.lexbuf -> string
 

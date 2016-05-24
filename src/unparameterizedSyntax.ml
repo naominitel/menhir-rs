@@ -1,20 +1,6 @@
-(**************************************************************************)
-(*                                                                        *)
-(*  Menhir                                                                *)
-(*                                                                        *)
-(*  FranÃ§ois Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann RÃ©gis-Gianas, PPS, UniversitÃ© Paris Diderot                      *)
-(*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
-(*                                                                        *)
-(**************************************************************************)
-
-(* A parameterized branch may instantiate parameterized non terminals. 
-   If the parameterized branch contributes to the definition of a 
-   parameterized terminal, then the instantiation of parameterized 
+(* A parameterized branch may instantiate parameterized non terminals.
+   If the parameterized branch contributes to the definition of a
+   parameterized terminal, then the instantiation of parameterized
    non terminals that are defined simultaneously must only be done with
    formal parameters.
    Furthermore, all the parameterized non terminals that are in a common
@@ -32,31 +18,31 @@ open Syntax
 type branch =
     {
       branch_position           : Positions.t;
-      producers			: (symbol * identifier) list; (* TEMPORARY convention renversée
+      producers                 : (symbol * identifier) list; (* TEMPORARY convention renversée
                                     par rapport à syntax.mli; faire un type record au lieu d'une paire? *)
-      action			: action;
-      branch_prec_annotation	: branch_prec_annotation;
+      action                    : action;
+      branch_prec_annotation    : branch_prec_annotation;
       branch_production_level   : branch_production_level
     }
 
-type rule = 
+type rule =
     {
-      branches		   : branch list;
+      branches             : branch list;
       positions            : Positions.t list;
       (* This flag is not relevant after the NonTerminalInlining.inline pass. *)
       inline_flag          : bool;
     }
 
-type grammar = 
+type grammar =
     {
-      preludes	           : Stretch.t list;
-      postludes	           : Syntax.trailer list;
+      preludes             : Stretch.t list;
+      postludes            : Syntax.trailer list;
       parameters           : Stretch.t list;
       start_symbols        : StringSet.t;
       types                : Stretch.ocamltype StringMap.t;
       on_error_reduce      : StringSet.t;
-      tokens	           : Syntax.token_properties StringMap.t;
-      rules	           : rule StringMap.t;
+      tokens               : Syntax.token_properties StringMap.t;
+      rules                : rule StringMap.t;
     }
 
 (* [tokens grammar] is a list of all (real) tokens in the grammar

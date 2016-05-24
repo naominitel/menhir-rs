@@ -18,7 +18,7 @@
 module type TABLES = sig
 
   (* This is the parser's type of tokens. *)
-    
+
   type token
 
   (* This maps a token to its internal (generation-time) integer code. *)
@@ -119,7 +119,7 @@ module type TABLES = sig
      actions. The calling convention for semantic actions is described in
      [EngineTypes]. This table contains ONLY NON-START PRODUCTIONS, so the
      indexing is off by [start]. Be careful. *)
-    
+
   val semantic_action: ((int, Obj.t, token) EngineTypes.env ->
                         (int, Obj.t)        EngineTypes.stack) array
 

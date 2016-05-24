@@ -1,17 +1,3 @@
-/**************************************************************************/
-/*                                                                        */
-/*  Menhir                                                                */
-/*                                                                        */
-/*  François Pottier, INRIA Paris-Rocquencourt                            */
-/*  Yann Régis-Gianas, PPS, Université Paris Diderot                      */
-/*                                                                        */
-/*  Copyright 2005-2015 Institut National de Recherche en Informatique    */
-/*  et en Automatique. All rights reserved. This file is distributed      */
-/*  under the terms of the Q Public License version 1.0, with the change  */
-/*  described in file LICENSE.                                            */
-/*                                                                        */
-/**************************************************************************/
-
 /* This is the fancy version of the parser, to be processed by menhir.
    It is kept in sync with [Parser], but exercises menhir's features. */
 
@@ -35,7 +21,7 @@ open Positions
 
 %token TOKEN TYPE LEFT RIGHT NONASSOC START PREC PUBLIC COLON BAR EOF EQUAL
 %token INLINE LPAREN RPAREN COMMA QUESTION STAR PLUS PARAMETER ON_ERROR_REDUCE
-%token <string Positions.located> LID UID 
+%token <string Positions.located> LID UID
 %token <Stretch.t> HEADER
 %token <Stretch.ocamltype> OCAMLTYPE
 %token <Stretch.t Lazy.t> PERCENTPERCENT
@@ -67,12 +53,12 @@ open Positions
 
 grammar:
   ds = declaration* PERCENTPERCENT rs = rule* t = trailer
-    { 
-      { 
-	pg_filename          = ""; (* filled in by the caller *)
-	pg_declarations      = List.flatten ds;
-	pg_rules	     = rs @ ParserAux.rules();
-	pg_trailer           = t
+    {
+      {
+        pg_filename          = ""; (* filled in by the caller *)
+        pg_declarations      = List.flatten ds;
+        pg_rules             = rs @ ParserAux.rules();
+        pg_trailer           = t
       }
     }
 
@@ -93,9 +79,9 @@ declaration:
     {
       match t with
       | None ->
-	  List.map (Positions.map (fun nonterminal -> DStart nonterminal)) nts
+          List.map (Positions.map (fun nonterminal -> DStart nonterminal)) nts
       | Some t ->
-	  Misc.mapd (fun ntloc ->
+          Misc.mapd (fun ntloc ->
             Positions.mapd (fun nt -> DStart nt, DType (t, ParameterVar ntloc)) ntloc) nts
     }
 
@@ -185,11 +171,11 @@ rule:
   COLON
   optional_bar
   branches = branches
-    { 
+    {
       let public, inline = flags in
       {
-        pr_public_flag = public; 
-        pr_inline_flag = inline; 
+        pr_public_flag = public;
+        pr_inline_flag = inline;
         pr_nt          = Positions.value symbol;
         pr_positions   = [ Positions.position symbol ];
         pr_parameters  = List.map Positions.value params;
@@ -237,13 +223,13 @@ production_group:
            is within bounds. *)
         let action : Syntax.identifier option array -> Action.t = action in
         let pr_action = action (ParserAux.producer_names producers) in
-	{
-	  pr_producers;
-	  pr_action;
-	  pr_branch_prec_annotation   = ParserAux.override pos oprec1 oprec2;
-	  pr_branch_production_level  = level;
-	  pr_branch_position          = pos
-	})
+        {
+          pr_producers;
+          pr_action;
+          pr_branch_prec_annotation   = ParserAux.override pos oprec1 oprec2;
+          pr_branch_production_level  = level;
+          pr_branch_position          = pos
+        })
       productions
     }
 

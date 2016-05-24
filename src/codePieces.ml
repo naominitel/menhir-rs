@@ -1,17 +1,3 @@
-(**************************************************************************)
-(*                                                                        *)
-(*  Menhir                                                                *)
-(*                                                                        *)
-(*  François Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann Régis-Gianas, PPS, Université Paris Diderot                      *)
-(*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
-(*                                                                        *)
-(**************************************************************************)
-
 (* This module defines many internal naming conventions for use by the
    two code generators, [CodeBackend] and [TableBackend]. It also offers
    a few code generation facilities. *)
@@ -85,8 +71,8 @@ let semvtypent nt =
   | None ->
 
       (* [nt] has unknown type. If we we have run [Infer], then this
-	 can't happen. However, running type inference is only an
-	 option, so we still have to deal with that case. *)
+         can't happen. However, running type inference is only an
+         option, so we still have to deal with that case. *)
 
       TypVar (ntvar nt)
 
@@ -193,15 +179,15 @@ let destructuretokendef name codomain bindsemv branch = {
   valval =
     EAnnot (
       EFun ([ PVar token ],
-	EMatch (EVar token,
-	  Terminal.fold (fun tok branches ->
-	    if Terminal.pseudo tok then
-	      branches
-	    else
-	      { branchpat = (if bindsemv then tokpatv else tokpat) tok;
-		branchbody = branch tok } :: branches
-	  ) []
-	)
+        EMatch (EVar token,
+          Terminal.fold (fun tok branches ->
+            if Terminal.pseudo tok then
+              branches
+            else
+              { branchpat = (if bindsemv then tokpatv else tokpat) tok;
+                branchbody = branch tok } :: branches
+          ) []
+        )
       ),
       type2scheme (arrow TokenType.ttoken codomain)
     )
@@ -227,5 +213,5 @@ let excvaldef = {
   valpublic = false;
   valpat = PVar parse_error;
   valval = EData (Interface.excname, [])
-} 
+}
 

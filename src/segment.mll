@@ -1,17 +1,3 @@
-(**************************************************************************)
-(*                                                                        *)
-(*  Menhir                                                                *)
-(*                                                                        *)
-(*  François Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann Régis-Gianas, PPS, Université Paris Diderot                      *)
-(*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
-(*                                                                        *)
-(**************************************************************************)
-
 (* This lexer is used to cut an input into segments, delimited by a blank
    line. (More precisely, by a run of at least one blank line and zero or more
    comment lines.) It produces a list of segments, where each segment is
@@ -119,6 +105,6 @@ and busy segments opening just_saw_a_newline = parse
            updated based on [buf.lex_abs_pos + buf.lex_curr_pos]. *)
       tag, content, lexbuf
     ) segments
-      
+
 }
 

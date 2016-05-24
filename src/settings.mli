@@ -1,17 +1,3 @@
-(**************************************************************************)
-(*                                                                        *)
-(*  Menhir                                                                *)
-(*                                                                        *)
-(*  François Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann Régis-Gianas, PPS, Université Paris Diderot                      *)
-(*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
-(*                                                                        *)
-(**************************************************************************)
-
 (* This module parses the command line. *)
 
 (* The list of file names that appear on the command line. *)
@@ -32,9 +18,9 @@ val token_type_mode: token_type_mode
 type construction_mode =
   | ModeCanonical     (* --canonical: canonical Knuth LR(1) automaton *)
   | ModeInclusionOnly (* --no-pager : states are merged when there is an inclusion
-			              relationship, default reductions are used *)
+                                      relationship, default reductions are used *)
   | ModePager         (* normal mode: states are merged as per Pager's criterion,
-			              default reductions are used *)
+                                      default reductions are used *)
   | ModeLALR          (* --lalr     : states are merged as in an LALR generator,
                                       i.e. as soon as they have the same LR(0) core *)
 

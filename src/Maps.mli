@@ -1,17 +1,3 @@
-(**************************************************************************)
-(*                                                                        *)
-(*  Menhir                                                                *)
-(*                                                                        *)
-(*  François Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann Régis-Gianas, PPS, Université Paris Diderot                      *)
-(*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
-(*                                                                        *)
-(**************************************************************************)
-
 (* This module defines three signatures for association maps, together
    with a number of conversion functors. *)
 
@@ -58,7 +44,7 @@ end
 module PersistentMapsToImperativeMaps
   (M : PERSISTENT_MAPS)
      : IMPERATIVE_MAPS with type key = M.key
-		        and type 'data t = 'data M.t ref
+                        and type 'data t = 'data M.t ref
 
 (* An implementation of imperative maps can be made to satisfy the interface
    of a single imperative map. This map is obtained via a single call to [create]. *)
@@ -67,7 +53,7 @@ module ImperativeMapsToImperativeMap
   (M : IMPERATIVE_MAPS)
   (D : sig type data end)
      : IMPERATIVE_MAP with type key = M.key
-		       and type data = D.data
+                       and type data = D.data
 
 (* An implementation of imperative maps as arrays is possible if keys
    are consecutive integers. *)

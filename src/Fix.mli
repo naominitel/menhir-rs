@@ -1,14 +1,13 @@
 (**************************************************************************)
 (*                                                                        *)
-(*  Menhir                                                                *)
+(*  Fix                                                                   *)
 (*                                                                        *)
-(*  François Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann Régis-Gianas, PPS, Université Paris Diderot                      *)
+(*  Author:  Fran�ois Pottier, INRIA Paris-Rocquencourt                   *)
+(*  Version: 20101206                                                     *)
 (*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
+(*  The copyright to this code is held by Institut National de Recherche  *)
+(*  en Informatique et en Automatique (INRIA). All rights reserved. This  *)
+(*  file is distributed under the license CeCILL-C (see file LICENSE).    *)
 (*                                                                        *)
 (**************************************************************************)
 
@@ -96,4 +95,3 @@ module Make
        computation takes place, on demand, when [get] is applied. *)
     val lfp: equations -> valuation
   end
-  

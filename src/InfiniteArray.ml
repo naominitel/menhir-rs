@@ -19,7 +19,7 @@ type 'a t = {
     default: 'a;
     mutable table: 'a array;
     mutable extent: int; (* the index of the greatest [set] ever, plus one *)
-  } 
+  }
 
 let default_size =
   16384 (* must be non-zero *)
@@ -28,7 +28,7 @@ let make x = {
   default = x;
   table = Array.make default_size x;
   extent = 0;
-} 
+}
 
 let rec new_length length i =
   if i < length then

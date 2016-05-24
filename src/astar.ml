@@ -1,17 +1,3 @@
-(**************************************************************************)
-(*                                                                        *)
-(*  Menhir                                                                *)
-(*                                                                        *)
-(*  François Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann Régis-Gianas, PPS, Université Paris Diderot                      *)
-(*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
-(*                                                                        *)
-(**************************************************************************)
-
 (* This module implements A* search, following Hart, Nilsson,
    and Raphael (1968).
 
@@ -126,7 +112,7 @@ end) = struct
 
     let add node inode =
       H.add t node inode
-       
+
     let get node =
       H.find t node
 
@@ -174,16 +160,16 @@ end) = struct
       inode.priority <- priority;
       match InfiniteArray.get a priority with
       | None ->
-	  InfiniteArray.set a priority (Some inode);
+          InfiniteArray.set a priority (Some inode);
           (* Decrease [best], if necessary, so as not to miss the new element.
              In the special case of A*, this never happens. *)
           assert (!best <= priority);
-	  (* if priority < !best then best := priority *)
+          (* if priority < !best then best := priority *)
       | Some inode' ->
-	  inode.next <- inode';
-	  inode.prev <- inode'.prev;
-	  inode'.prev.next <- inode;
-	  inode'.prev <- inode
+          inode.next <- inode';
+          inode.prev <- inode'.prev;
+          inode'.prev.next <- inode;
+          inode'.prev <- inode
 
     (* Takes a node off its doubly linked list. Does not adjust [best],
        as this is not necessary in order to preserve the invariant. *)
@@ -193,16 +179,16 @@ end) = struct
         InfiniteArray.set a inode.priority None
       else begin
         InfiniteArray.set a inode.priority (Some inode.next);
-	inode.next.prev <- inode.prev;
-	inode.prev.next <- inode.next;
-	inode.next <- inode;
-	inode.prev <- inode
+        inode.next.prev <- inode.prev;
+        inode.prev.next <- inode.next;
+        inode.next <- inode;
+        inode.prev <- inode
       end;
       inode.priority <- -1
 
     let rec get () =
       if !cardinal = 0 then
-	None
+        None
       else
         get_nonempty()
 
@@ -221,7 +207,7 @@ end) = struct
 
     let add_or_decrease inode priority =
       if inode.priority >= 0 then
-	remove inode;
+        remove inode;
       add inode priority
 
   end

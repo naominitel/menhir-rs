@@ -1,17 +1,3 @@
-(**************************************************************************)
-(*                                                                        *)
-(*  Menhir                                                                *)
-(*                                                                        *)
-(*  François Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann Régis-Gianas, PPS, Université Paris Diderot                      *)
-(*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
-(*                                                                        *)
-(**************************************************************************)
-
 open Printf
 
 (* ---------------------------------------------------------------------------- *)
@@ -80,7 +66,7 @@ let errors =
   ref false
 
 let display continuation header positions format =
-  List.iter (fun position -> 
+  List.iter (fun position ->
     fprintf stderr "%s:\n" (Positions.string_of_pos position)
   ) positions;
   Printf.kfprintf
@@ -92,19 +78,19 @@ let error positions format =
   display
     (fun _ -> exit 1)
     "Error: "
-    positions format 
+    positions format
 
 let signal positions format =
   display
     (fun _ -> errors := true)
     "Error: "
-    positions format 
+    positions format
 
 let warning positions format =
   display
     (fun _ -> ())
     "Warning: "
-    positions format 
+    positions format
 
 let errors () =
   !errors

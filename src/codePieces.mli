@@ -1,17 +1,3 @@
-(**************************************************************************)
-(*                                                                        *)
-(*  Menhir                                                                *)
-(*                                                                        *)
-(*  François Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann Régis-Gianas, PPS, Université Paris Diderot                      *)
-(*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
-(*                                                                        *)
-(**************************************************************************)
-
 (* This module defines many internal naming conventions for use by the
    two code generators, [CodeBackend] and [TableBackend]. It also offers
    a few code generation facilities. *)
@@ -29,7 +15,7 @@ val ntvar : Nonterminal.t -> string
 
 (* The variable that holds the environment. This is a parameter to all
    functions. We do not make it a global variable because we wish to
-   preserve re-entrancy. *) 
+   preserve re-entrancy. *)
 
 val env : string
 

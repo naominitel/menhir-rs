@@ -1,17 +1,3 @@
-(**************************************************************************)
-(*                                                                        *)
-(*  Menhir                                                                *)
-(*                                                                        *)
-(*  François Pottier, INRIA Paris-Rocquencourt                            *)
-(*  Yann Régis-Gianas, PPS, Université Paris Diderot                      *)
-(*                                                                        *)
-(*  Copyright 2005-2015 Institut National de Recherche en Informatique    *)
-(*  et en Automatique. All rights reserved. This file is distributed      *)
-(*  under the terms of the Q Public License version 1.0, with the change  *)
-(*  described in file LICENSE.                                            *)
-(*                                                                        *)
-(**************************************************************************)
-
 (* This module deals with a few details regarding the definition of
    the [token] type. In particular, if [--only-tokens] was specified,
    it emits the type definition and exits. *)
@@ -156,8 +142,8 @@ let produce_tokentypes grammar =
   | Settings.TokenTypeOnly ->
 
       (* Create both an .mli file and an .ml file. This is made
-	 necessary by the fact that the two can be different
-	 when there are functor parameters. *)
+         necessary by the fact that the two can be different
+         when there are functor parameters. *)
 
       let i =
         tokentypedef grammar @
@@ -166,20 +152,20 @@ let produce_tokentypes grammar =
         )
       in
 
-      let module P = 
-	Printer.Make (struct 
-			let f = open_out (Settings.base ^ ".mli")
-			let locate_stretches = None 
-		      end) 
+      let module P =
+        Printer.Make (struct
+                        let f = open_out (Settings.base ^ ".mli")
+                        let locate_stretches = None
+                      end)
       in
       P.interface [
         IIFunctor (grammar.parameters, i)
       ];
-      let module P = 
-	Printer.Make (struct 
-			let f = open_out (Settings.base ^ ".ml")
-			let locate_stretches = None 
-		      end) 
+      let module P =
+        Printer.Make (struct
+                        let f = open_out (Settings.base ^ ".ml")
+                        let locate_stretches = None
+                      end)
       in
       P.program [
         SIFunctor (grammar.parameters,
