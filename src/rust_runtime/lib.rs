@@ -3,7 +3,6 @@
 // LR(1) automaton with their generated parse table.
 
 #[macro_use] extern crate log;
-use std::ops::Index;
 
 // The type of semantic actions.
 // Some(ptr) = a flat (not closure) code pointer to the handler
@@ -21,30 +20,33 @@ pub enum Action<YYType> {
     Shift(usize)
 }
 
+impl<T> Copy for Action<T> {}
+
+impl<T> Clone for Action<T> {
+    fn clone(&self) -> Self {
+        match *self {
+            Action::Err => Action::Err,
+            Action::Reduce(act) => Action::Reduce(act),
+            Action::Shift(shift) => Action::Shift(shift)
+        }
+    }
+}
+
 pub type Stack<YYType> = Vec<(usize, YYType)>;
 
-// To avoid unnecessary out-of-bounds checks (we know that the parser will never
-// attempt out-of-bounds access on the parse table), we pass the tables to the
-// parse loop as pointers to fixed-sized arrays rather than slices. The problem
-// is that there is no unique type for fixed-size arrays, so we are
-// parameterized here by the concrete type of the table with a trait bound that
-// allows us to index it by a state and a token. (To simplify, we use a tuple as
-// index. This avoids an additionnal type parameter.). In practice the type will
-// always be [[Action ; N] ; M] wrapped in a type that implements indexing by a
-// tuple over it.
-// We don't need the goto table, only the semantic actions will actually use it.
-pub fn parse<TokenType, LexerType, ParseTableType, DefRedType, ErrType, YYType>(
-        mut lexer: &mut LexerType,
-        parse_table: &ParseTableType,
-        default_reduction: &DefRedType,
-        error_table: &ErrType,
-        next_token: fn(&mut LexerType) -> (YYType, usize),
+pub trait LRParser {
+    type YYType;
+
+    fn default_reduction(state: usize) -> Option<SemAct<Self::YYType>>;
+    fn action(state: usize, token: usize) -> Action<Self::YYType>;
+}
+
+pub fn parse<Token, Lexer, Parser>(
+        mut lexer: &mut Lexer,
+        next_token: fn(&mut Lexer) -> (Parser::YYType, usize),
         initial: usize
-    ) -> Result<Stack<YYType>, ()>
-    where LexerType:      Iterator<Item = TokenType>,
-          ParseTableType: Index<(usize, usize), Output = Action<YYType>>,
-          DefRedType:     Index<usize, Output = Option<SemAct<YYType>>>,
-          ErrType:        Index<(usize, usize), Output = bool> {
+    ) -> Result<Stack<Parser::YYType>, ()>
+    where Lexer: Iterator<Item = Token>, Parser: LRParser {
 
     // the current state
     let mut state = initial;
@@ -57,16 +59,12 @@ pub fn parse<TokenType, LexerType, ParseTableType, DefRedType, ErrType, YYType>(
     'a: loop {
         debug!("current state: {}, token: {}", state, tok);
 
-        if error_table[(state, tok)] {
-            return Err(());
-        }
-
-        match parse_table[(state, tok)] {
+        match Parser::action(state, tok) {
             Action::Shift(shift) => {
                 stack.push((state, yylval));
                 state = shift;
 
-                while let Some(red) = default_reduction[state] {
+                while let Some(red) = Parser::default_reduction(state) {
                     match red {
                         Some(code) => state = code(state, &mut stack),
                         None => break 'a
@@ -81,7 +79,7 @@ pub fn parse<TokenType, LexerType, ParseTableType, DefRedType, ErrType, YYType>(
 
             Action::Reduce(Some(reduce)) => {
                 state = reduce(state, &mut stack);
-                while let Some(red) = default_reduction[state] {
+                while let Some(red) = Parser::default_reduction(state) {
                     match red {
                         Some(code) => state = code(state, &mut stack),
                         None => break 'a
@@ -90,7 +88,7 @@ pub fn parse<TokenType, LexerType, ParseTableType, DefRedType, ErrType, YYType>(
             }
 
             Action::Reduce(None) => break,
-            Action::Err => unreachable!()
+            Action::Err => return Err(())
         }
     }
 

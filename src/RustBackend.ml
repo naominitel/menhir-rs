@@ -149,37 +149,6 @@ let encode_table name table ty encode_elem =
     let ty = TArray (ty, Array.length array) in
     IGlob (name, KConst, ty, EArray (array))
 
-(* Create an implementation id Index<idx_ty> for ty *)
-let index_impl ty idx_ty out_ty idx_pat self_pats ret_expr = IImpl (
-    [], ("Index", [idx_ty]), TVar ty,
-    [
-        (* type Output = $ty; *)
-        IType ("Output", out_ty) ;
-
-        (* fn index(&self, (st, tok): (usize, usize)) -> &$ty *)
-        IFn (false, "index", {
-            generics = [] ;
-            self = SelfRef ;
-            args = [(idx_pat, idx_ty)] ;
-            ret = TRef out_ty ;
-
-            body = {
-                (* let &$type_name(disp, table) = self; *)
-                stmts = [SLet (PDeref (PVariant ([ty], self_pats)), None, EVar "self")] ;
-
-                (* &table[(disp[st] + tok as isize) as usize] *)
-                ret = Some (ERef (ret_expr))
-            }
-        })
-    ]
-)
-
-(* Create a wrapper type. *)
-let wrapper_type name tys exprs impls =
-    let type_name  = Format.sprintf "%sType" name in
-    [ INewtype (type_name, tys) ] @ impls @
-    [ IGlob (name, KStatic, TVar (type_name), EVariant ([type_name], exprs)) ]
-
 (* Take a compressed two-dimentional table and encode it as
  * - Two constant tables (the displacement table and the table)
  * - A newtype wrapper around those two tables
@@ -187,47 +156,77 @@ let wrapper_type name tys exprs impls =
 let encode_compressed name (disp, table) ty encode_elem =
     let table_name = Format.sprintf "%s_TABLE" name in
     let disp_name  = Format.sprintf "%s_TABLE_DISP" name in
-    let type_name  = Format.sprintf "%sType" name in
 
-    let impl =
-        index_impl
-            type_name (TTup [TUsize ; TUsize]) ty
-            (PTup [PVar "st" ; PVar "tok"])
-            [PRef "disp" ; PRef "table"]
-            (EIndex (EVar "table", EAs (EBinop ("+", EIndex (EVar "disp", EVar "st"),
-                                                EAs (EVar "tok", TIsize)), TUsize))) ;
-    in
+    [encode_table disp_name disp TIsize (fun i -> EInt i) ;
+     encode_table table_name table ty encode_elem]
 
-    (encode_table disp_name disp TIsize (fun i -> EInt i)) ::
-    (encode_table table_name table ty encode_elem) ::
-    (wrapper_type name
-         [TArray (TIsize, Array.length disp) ; TArray (ty, Array.length table)]
-         [EVar (disp_name) ; EVar (table_name)] [impl])
+(* The type of default reductions entries: Option<SemAct<YYType>>. *)
+let defred_ty = (TApp ("Option", [TApp ("SemAct", [TVar "YYType"])]))
 
 let parser_tables_items () =
-    let defred_ty = (TApp ("Option", [TApp ("SemAct", [TVar "YYType"])])) in
     let (act_table, goto_table, error_table, default_table) = parser_tables () in
     encode_table "ERROR_TABLE" error_table TBool (fun err -> EBool err) ::
-
-    wrapper_type "ERROR" [TArray (TBool, Array.length error_table)] [EVar ("ERROR_TABLE")]
-        [index_impl "ERRORType" (TTup [TUsize ; TUsize]) TBool
-             (PTup [PVar "st" ; PVar "tok"]) [PRef "table"]
-             (EIndex (EVar "table",
-                      EBinop ("+", EBinop ("*", EVar "st", EInt (Terminal.n)),
-                              EVar "tok")))] @
-
     encode_table "DEFAULT_TABLE" default_table defred_ty
         (function
             | Some act -> EVariant (["Some"], [encode_semact act])
             | None -> EVariant (["None"], [])) ::
-
-    wrapper_type "DEFAULT" [TArray (defred_ty, Array.length default_table)]
-        [EVar ("DEFAULT_TABLE")]
-        [index_impl "DEFAULTType" TUsize defred_ty
-             (PVar "st") [PRef "table"] (EIndex (EVar "table", EVar "st"))] @
-
-    encode_compressed "ACT" act_table (TApp ("Action", [TVar "YYType"])) encode_action @
+    encode_compressed "ACTION" act_table (TApp ("Action", [TVar "YYType"])) encode_action @
     encode_compressed "GOTO" goto_table TUsize (fun st  -> EInt st)
+
+let simple_function name args ret_ty ret_expr =
+    IFn (false, name, {
+        generics = [] ;
+        self = SelfNone ;
+        args = args ;
+        ret = ret_ty ;
+        body = { stmts = [] ; ret = Some(ret_expr) }
+    })
+
+let compressed_index table idx1 idx2 =
+    let disp = Format.sprintf "%s_DISP" table in
+    EIndex (EVar table,
+            EAs (EBinop ("+", EIndex (EVar disp, idx1), EAs (idx2, TIsize)),
+                 TUsize))
+
+let parser_type () =
+    let struct_ = INewtype ("Parser", []) in
+    let impl = IImpl (TVar "Parser", [
+        (* The GOTO function is not exposed. *)
+        simple_function
+            "goto" [(PVar "state", TUsize) ; (PVar "tok", TUsize)]
+            TUsize (EBinop (
+                "-", compressed_index "GOTO_TABLE" (EVar "state") (EVar "tok"),
+                EInt 1
+            ))
+    ]) in
+    let trait_impl = ITraitImpl (
+        (* impl LRParser for Parser *)
+        [], ("LRParser", []), (TVar "Parser"), [
+            IType ("YYType", (TVar "YYType")) ;
+
+            simple_function "action"
+                [(PVar "state", TUsize) ; (PVar "tok", TUsize)]
+                (TApp ("Action", [TVar "YYType"]))
+                (EIf (
+                    (* if ERROR_TABLE[state * Terminal.n + tok] *)
+                    EIndex (EVar "ERROR_TABLE",
+                            EBinop ("+", EBinop ("*", EVar "state",
+                                                 EInt (Terminal.n)),
+                                    EVar "tok")),
+
+                    (* true => Err *)
+                    EVariant (["Action" ; "Err"], []),
+
+                    (* false => ACTION_TABLE[(disp[st] + tok as isize) as usize] *)
+                    compressed_index "ACTION_TABLE" (EVar "state") (EVar "tok")
+                )) ;
+
+            simple_function "default_reduction"
+                [(PVar "state", TUsize)] defred_ty
+                (EIndex (EVar "DEFAULT_TABLE", EVar "state")) ;
+        ]
+    ) in
+    [struct_ ; impl ; trait_impl]
 
 (* The semantic actions.
  * Actions are encoded as simple Rust functions that take as argument the
@@ -312,11 +311,10 @@ let semantic_actions () =
                              ])
                          )] ;
 
-                         ret = Some (EBinop (
-                             "-",
-                             EIndex (EVar "GOTO", ETup [EVar "state" ; EInt nt_no]),
-                             EInt 1
-                         ))
+                         ret = Some (
+                             ECall (["Parser" ; "goto"], [],
+                                    [EVar "state" ; EInt nt_no])
+                         )
                      }
                  }
              ))
@@ -382,12 +380,9 @@ let entry_points () =
                          SLet (PMut "stack", None, EMac (
                              "try", Some (ECall (
                                  ["menhir_runtime" ; "parse"],
-                                 [TVar "Token" ; TVar "Lexer" ; TVar "ACTType" ;
-                                  TVar "DEFAULTType" ; TVar "ERRORType" ;
-                                  TVar "YYType"],
-                                 [EVar "lexer" ; ERef (EVar "ACT") ;
-                                  ERef (EVar "DEFAULT") ; ERef (EVar "ERROR") ;
-                                  EVar "next_tok" ; EInt (Lr1.number init_st)]
+                                 [TVar "Token" ; TVar "Lexer" ; TVar "Parser"],
+                                 [EVar "lexer" ; EVar "next_tok" ;
+                                  EInt (Lr1.number init_st)]
                              ))
                          ))
                      ] ;
@@ -406,10 +401,10 @@ let entry_points () =
 
 let items () =
     IExtCrate "menhir_runtime" ::
-    IUse ["std" ; "ops" ; "Index"] ::
     IUse ["self" ; "menhir_runtime" ; "Action"] ::
     IUse ["self" ; "menhir_runtime" ; "SemAct"] ::
-    parser_enums () @ parser_tables_items () @
+    IUse ["self" ; "menhir_runtime" ; "LRParser"] ::
+    parser_enums () @ parser_tables_items () @ parser_type () @
     semantic_actions () @ [next_token ()] @ entry_points ()
 
 let write_all oc =

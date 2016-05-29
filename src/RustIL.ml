@@ -34,6 +34,7 @@ type expr =
     | EBinop of string * expr * expr
     | EAs of expr * ty
     | EMatch of expr * (pattern * expr) list
+    | EIf of expr * expr * expr
     | EMeth of expr * string * expr list
     | EMac of string * expr option
     | ETextual of Stretch.t
@@ -81,7 +82,8 @@ type item =
     | IGlob of string * glob_kind * ty * expr
     | IFn of bool * string * fn_def
     | INewtype of string * ty list
-    | IImpl of (string * trait_bound) list * trait * ty * item list
+    | ITraitImpl of (string * trait_bound) list * trait * ty * item list
+    | IImpl of ty * item list
     | IType of string * ty
 
 open Format
@@ -152,6 +154,9 @@ let rec pp_expr ff = function
             (pp_print_list ?pp_sep:(Some (fun ff () -> fprintf ff ",@,"))
                  (fun ff (p, e) -> fprintf ff "%a => %a" pp_pat p pp_expr e))
             arms
+    | EIf (cond, t, f) ->
+      fprintf ff "if %a {@,@[<v 4>    %a@]@,}@, else {@,@[<v 4>    %a@]@,}"
+          pp_expr cond pp_expr t pp_expr f
     | EMeth (e, m, a) ->
         fprintf ff "%a.%s(@[<hv>%a@])" pp_expr e m
             (pp_print_list ?pp_sep:(Some (fun ff () -> fprintf ff ",@ "))
@@ -226,7 +231,7 @@ let rec pp_item ff = function
             pp_block body
     | INewtype (name, tys) ->
         fprintf ff "struct %a;" (pp_variant pp_print_string pp_ty) (name, tys)
-    | IImpl (generics, (trait, args), ty, items) ->
+    | ITraitImpl (generics, (trait, args), ty, items) ->
         fprintf ff "impl%a %s<%a> for %a {@,@[<v 4>    %a@]@,}"
             (match generics with
                 | [] -> fun _ () -> ()
@@ -234,6 +239,11 @@ let rec pp_item ff = function
                     fprintf ff "<%a>"
                         (pp_list (fun ff (t, _) -> fprintf ff "%s" t) ", ") l) ()
             trait (pp_list pp_ty ", ") args pp_ty ty
+            (pp_print_list ?pp_sep:(Some (fun ff () -> fprintf ff "@,@,")) pp_item)
+            items
+    | IImpl (ty, items) ->
+        fprintf ff "impl %a {@,@[<v 4>    %a@]@,}"
+            pp_ty ty
             (pp_print_list ?pp_sep:(Some (fun ff () -> fprintf ff "@,@,")) pp_item)
             items
     | IType (name, ty) -> fprintf ff "type %s = %a;" name pp_ty ty
