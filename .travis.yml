@@ -1,0 +1,32 @@
+language: rust
+sudo: true
+dist: trusty
+
+rust:
+  - nightly
+  - beta
+  - stable
+
+script:
+  - |
+    # Install OCaml 4.02
+    sudo add-apt-repository --yes ppa:avsm/ocaml42+opam120
+    sudo apt-get -qq update
+    sudo apt-get install -y ocaml
+
+    # Build Menhir
+    make PREFIX=/usr/local
+
+    # Run tests
+    FAILURE=0
+    cd demos/rust/
+    for i in `ls`; do
+        cd $i
+        cargo test
+        if [ $? -ne 0 ]; then
+            FAILURE=1
+        fi
+        cd ..
+    done
+
+    exit $FAILURE
