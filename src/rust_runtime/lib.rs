@@ -43,29 +43,65 @@ pub trait LRParser {
               -> Action<Self::YYType, Self::State>;
 }
 
-fn next_token<Lexer, Parser>(lexer: &mut Lexer)
-                             -> Result<(Parser::YYType, Parser::Terminal), ()>
-    where Lexer: Iterator,
-          Parser: LRParser,
-          Lexer::Item: Into<(Parser::YYType, Parser::Terminal)> {
-    match lexer.next() {
-        Some(tok) => Ok(tok.into()),
-        None => Err(())
+pub trait Lexer {
+    type Token;
+    type Error;
+
+    fn input(&mut self) -> Result<(Self::Token), Self::Error>;
+}
+
+// Convert an iterator into a lexer.
+pub struct IteratorLexer<Iter>(Iter) where Iter: Iterator;
+
+#[derive(Clone, Copy, Debug)]
+pub struct UnexpectedEof;
+
+impl<Iter> Lexer for IteratorLexer<Iter>
+    where Iter: Iterator {
+    type Token = Iter::Item;
+    type Error = UnexpectedEof;
+
+    fn input(&mut self) -> Result<Self::Token, Self::Error> {
+        let &mut IteratorLexer(ref mut iter) = self;
+        match iter.next() {
+            Some(tok) => Ok(tok),
+            None => Err(UnexpectedEof)
+        }
     }
 }
 
+impl<Iter> IteratorLexer<Iter> where Iter: Iterator {
+    pub fn new(lex: Iter) -> Self {
+        IteratorLexer(lex)
+    }
+}
+
+// A fatal (non-recoverable parsing error).
+#[derive(Debug)]
+pub enum ParserError<Lexer: self::Lexer> {
+    // The parser encountered a syntax error that couldn't be recovered.
+    SyntaxError,
+
+    // The lexer encountered an error, typically an IO error.
+    LexerError(Lexer::Error)
+}
+
 pub fn parse<Lexer, Parser>(mut lexer: &mut Lexer, initial: Parser::State)
-                            -> Result<Stack<Parser::YYType, Parser::State>, ()>
-    where Lexer: Iterator,
+                            -> Result<Stack<Parser::YYType, Parser::State>,
+                                      ParserError<Lexer>>
+    where Lexer: self::Lexer,
           Parser: LRParser,
-          Lexer::Item: Into<(Parser::YYType, Parser::Terminal)> {
+          Lexer::Token: Into<(Parser::YYType, Parser::Terminal)> {
 
     // the current state
     let mut state = initial;
     let mut stack = Vec::new();
 
     // the current token and its semantic data
-    let (mut yylval, mut tok) = try!(next_token::<_, Parser>(&mut lexer));
+    let (mut yylval, mut tok) = match lexer.input() {
+        Ok(tok) => tok.into(),
+        Err(err) => return Err(ParserError::LexerError(err))
+    };
 
     // the parsing loop
     'a: loop {
@@ -82,7 +118,11 @@ pub fn parse<Lexer, Parser>(mut lexer: &mut Lexer, initial: Parser::State)
                 }
 
                 // discard
-                let (nval, ntok) = try!(next_token::<_, Parser>(&mut lexer));
+                let (nval, ntok) = match lexer.input() {
+                    Ok(tok) => tok.into(),
+                    Err(err) =>
+                        return Err(ParserError::LexerError(err))
+                };
                 tok = ntok;
                 yylval = nval;
             }
@@ -98,7 +138,7 @@ pub fn parse<Lexer, Parser>(mut lexer: &mut Lexer, initial: Parser::State)
             }
 
             Action::Reduce(None) => break,
-            Action::Err => return Err(())
+            Action::Err => return Err(ParserError::SyntaxError)
         }
     }
 

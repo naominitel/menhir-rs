@@ -365,21 +365,22 @@ let entry_points () =
              let Stretch.Declared(ty) = ty in
              let name = Nonterminal.print false nt in
              IFn (true, name, {
-                 generics = ["Lexer"] ;
+                 generics = ["Lex"] ;
                  where_clauses = [
-                     (["Lexer"], ("Iterator", [])) ;
-                     (["Lexer" ; "Item"],
+                     (["Lex"], ("Lexer", [])) ;
+                     (["Lex" ; "Token"],
                       ("Into", [TrPType (TTup [TVar "YYType" ; TUsize])]))
                  ] ;
                  self = SelfNone ;
-                 args = [(PVar "lexer", TRefMut (TVar "Lexer"))] ;
-                 ret = TApp ("Result", [TTextual ty ; TUnit]) ;
+                 args = [(PVar "lexer", TRefMut (TVar "Lex"))] ;
+                 ret = TApp ("Result", [TTextual ty ;
+                                        TApp ("ParserError", [TVar "Lex"])]) ;
                  body = {
                      stmts = [
                          SLet (PMut "stack", None, EMac (
                              "try", Some (ECall (
                                  ["menhir_runtime" ; "parse"],
-                                 [TVar "Lexer" ; TVar "Parser"],
+                                 [TVar "Lex" ; TVar "Parser"],
                                  [EVar "lexer" ; EInt (Lr1.number init_st)]
                              ))
                          ))
@@ -402,6 +403,8 @@ let items () =
     IUse ["self" ; "menhir_runtime" ; "Action"] ::
     IUse ["self" ; "menhir_runtime" ; "SemAct"] ::
     IUse ["self" ; "menhir_runtime" ; "LRParser"] ::
+    IUse ["self" ; "menhir_runtime" ; "Lexer"] ::
+    IUse ["self" ; "menhir_runtime" ; "ParserError"] ::
     parser_enums () @ parser_tables_items () @ parser_type () @
     semantic_actions () @ [into_impl ()] @ entry_points ()
 

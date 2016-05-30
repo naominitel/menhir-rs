@@ -1,3 +1,4 @@
+extern crate menhir_runtime;
 mod parser { include!(concat!(env!("OUT_DIR"), "/parser.rs")); }
 
 fn main() {
@@ -10,9 +11,10 @@ fn main() {
         CL,
         EOF
     ].into_iter();
-    match parser::main(&mut input) {
+    match parser::main(&mut menhir_runtime::IteratorLexer::new(&mut input)) {
         Ok(res) => println!("res = {:?}", res),
-        Err(_)  => panic!("syntax error")
+        Err(menhir_runtime::ParserError::SyntaxError) => panic!("syntax error"),
+        Err(menhir_runtime::ParserError::LexerError(err)) => panic!("lexer error: {:?}", err)
     }
     assert!(if let None = input.next() { true } else { false });
 }
