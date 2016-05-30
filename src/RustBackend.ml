@@ -206,6 +206,9 @@ let parser_type () =
         (* impl LRParser for Parser *)
         [], ("LRParser", []), (TVar "Parser"), [
             IType ("Terminal", TUsize) ;
+            simple_function "error"
+                [] TUsize (EInt (Terminal.t2i Terminal.error)) ;
+
             IType ("State", TUsize) ;
             IType ("YYType", (TVar "YYType")) ;
 

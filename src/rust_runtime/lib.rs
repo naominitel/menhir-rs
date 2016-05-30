@@ -34,6 +34,8 @@ impl<T, U: Clone> Clone for Action<T, U> {
 
 pub trait LRParser {
     type Terminal: Copy;
+    fn error() -> Self::Terminal;
+
     type State: Copy;
     type YYType;
 
@@ -99,11 +101,20 @@ pub trait EntryPoint<Parser: LRParser> {
     fn extract_output(stack: Stack<Parser::YYType, Parser::State>) -> Self::Output;
     fn initial() -> Parser::State;
 
-    fn parse<Lexer>(lexer: &mut Lexer) -> Result<Self::Output, ParserError<Lexer>>
+    fn new<Lexer>(lex: Lexer)
+                  -> Result<ParserState<Lexer, Parser, Self>, Lexer::Error>
         where Lexer: self::Lexer,
               Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
               Self: std::marker::Sized {
-        parse::<Lexer, Parser, Self>(lexer)
+        new::<Lexer, Parser, Self>(lex)
+    }
+
+    fn run<Lexer>(lex: Lexer) -> Result<Self::Output, ParserError<Lexer>>
+        where Lexer: self::Lexer,
+              Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
+              Lexer::Location: Clone,
+              Self: std::marker::Sized {
+        run::<Lexer, Parser, Self>(lex)
     }
 }
 
@@ -117,67 +128,196 @@ pub enum ParserError<Lexer: self::Lexer> {
     LexerError(Lexer::Error)
 }
 
-pub fn parse<Lexer, Parser, Entry>(mut lexer: &mut Lexer)
-                                   -> Result<Entry::Output,
-                                             ParserError<Lexer>>
+// The result of a parsing process.
+pub enum ParseResult<Output, Error, Fatal> {
+    Success(Output),
+    Error(Error),
+    Fatal(Fatal)
+}
+
+// Creates a new parser from the given lexer.
+pub fn new<Lexer, Parser, Entry>(mut lex: Lexer)
+                                 -> Result<ParserState<Lexer, Parser, Entry>,
+                                           Lexer::Error>
     where Lexer: self::Lexer,
+          Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
           Parser: LRParser,
-          Entry: EntryPoint<Parser>,
-          Lexer::Token: Into<(Parser::YYType, Parser::Terminal)> {
+          Entry: EntryPoint<Parser> {
+    let state = Entry::initial();
+    let stack = Vec::new();
+    let (pos, tok) = try!(lex.input());
+    let (yylval, tok) = tok.into();
+    Ok(ParserState {
+        state: state, stack: stack, yylval: yylval,
+        lookahead: tok, location: pos, lexer: lex,
+        entry: ::std::marker::PhantomData
+    })
+}
 
-    // the current state
-    let mut state = Entry::initial();
-    let mut stack = Vec::new();
-
-    // the current token and its semantic data
-    let (mut pos, (mut yylval, mut tok)) = match lexer.input() {
-        Ok((pos, tok)) => (pos, tok.into()),
+// Creates a new parser and run it. Equivalent to
+pub fn run<Lexer, Parser, Entry>(lex: Lexer) -> Result<Entry::Output,
+                                                       ParserError<Lexer>>
+    where Lexer: self::Lexer,
+            Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
+            Lexer::Location: Clone,
+            Parser: LRParser,
+            Entry: EntryPoint<Parser> {
+    let state = match new::<_, _, Entry>(lex) {
+        Ok(state) => state,
         Err(err) => return Err(ParserError::LexerError(err))
     };
+    state.run()
+}
 
-    // the parsing loop
-    'a: loop {
-        match Parser::action(state, tok) {
-            Action::Shift(shift) => {
-                stack.push((state, yylval));
-                state = shift;
+// The state of the parser.
+pub struct ParserState<Lexer, Parser, Entry>
+    where Parser: LRParser,
+          Lexer: self::Lexer,
+          Entry: EntryPoint<Parser> {
+    state: Parser::State,
+    yylval: Parser::YYType,
+    stack: Stack<Parser::YYType, Parser::State>,
+    lookahead: Parser::Terminal,
+    location: Lexer::Location,
+    lexer: Lexer,
+    entry: ::std::marker::PhantomData<Entry>
+}
 
-                while let Some(red) = Parser::default_reduction(state) {
-                    match red {
-                        Some(code) => state = code(state, &mut stack),
-                        None => break 'a
+impl<Lexer, Parser, Entry> ParserState<Lexer, Parser, Entry>
+    where Parser: LRParser,
+          Lexer: self::Lexer,
+          Lexer:: Token: Into<(Parser::YYType, Parser::Terminal)>,
+          Entry: EntryPoint<Parser> {
+    pub fn step(self) -> ParseResult<Entry::Output,
+                                     ErrorState<Lexer, Parser, Entry>,
+                                     ParserError<Lexer>> {
+        let ParserState {
+            mut state, mut yylval, mut stack,
+            mut lookahead, mut location, mut lexer,
+            entry: _
+        } = self;
+
+        'a: loop {
+            match Parser::action(state, lookahead) {
+                Action::Shift(shift) => {
+                    stack.push((state, yylval));
+                    state = shift;
+
+                    while let Some(red) = Parser::default_reduction(state) {
+                        match red {
+                            Some(code) => state = code(state, &mut stack),
+                            None => break 'a
+                        }
+                    }
+
+                    // discard
+                    let (pos, (nval, tok)) = match lexer.input() {
+                        Ok((pos, tok)) => (pos, tok.into()),
+                        Err(err) =>
+                            return ParseResult::Fatal(ParserError::LexerError(err))
+                    };
+                    lookahead = tok;
+                    location = pos;
+                    yylval = nval;
+                }
+
+                Action::Reduce(Some(reduce)) => {
+                    state = reduce(state, &mut stack);
+                    while let Some(red) = Parser::default_reduction(state) {
+                        match red {
+                            Some(code) => state = code(state, &mut stack),
+                            None => break 'a
+                        }
                     }
                 }
 
-                // discard
-                let (npos, (nval, ntok)) = match lexer.input() {
-                    Ok((pos, tok)) => (pos, tok.into()),
-                    Err(err) =>
-                        return Err(ParserError::LexerError(err))
-                };
-                tok = ntok;
-                yylval = nval;
-                pos = npos;
-            }
-
-            Action::Reduce(Some(reduce)) => {
-                state = reduce(state, &mut stack);
-                while let Some(red) = Parser::default_reduction(state) {
-                    match red {
-                        Some(code) => state = code(state, &mut stack),
-                        None => break 'a
-                    }
+                Action::Reduce(None) => break,
+                Action::Err => {
+                    return ParseResult::Error(ErrorState {
+                        state: ParserState {
+                            state: state, yylval: yylval, stack: stack,
+                            lookahead: lookahead, location: location, lexer: lexer,
+                            entry: ::std::marker::PhantomData
+                        }
+                    });
                 }
             }
+        }
 
-            Action::Reduce(None) => break,
-            Action::Err => return Err(ParserError::SyntaxError(pos))
+        ParseResult::Success(Entry::extract_output(stack))
+    }
+}
+
+impl<Lexer, Parser, Entry> ParserState<Lexer, Parser, Entry>
+    where Parser: LRParser,
+          Lexer: self::Lexer,
+          Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
+          Lexer::Location: Clone,
+          Entry: EntryPoint<Parser> {
+    pub fn run(mut self) -> Result<Entry::Output, ParserError<Lexer>> {
+        loop {
+            match self.step() {
+                ParseResult::Success(out) => return Ok(out),
+
+                ParseResult::Error(mut err_state) => {
+                    let last_pos = err_state.state.location.clone();
+
+                    loop {
+                        match err_state.try_recover() {
+                            ParseResult::Success(ok_state) => {
+                                self = ok_state;
+                                break;
+                            }
+
+                            ParseResult::Fatal(()) =>
+                                return Err(ParserError::SyntaxError(last_pos)),
+
+                            ParseResult::Error(new_err_state) =>
+                                err_state = new_err_state
+                        }
+                    }
+                }
+
+                ParseResult::Fatal(err) => return Err(err)
+            }
         }
     }
+}
 
-    // Extracting the final semantic value requires to know the label of the
-    // YYType variant that corresponds to the start symbol. We don't have this
-    // information here so we just return the stack and let the generated code
-    // do something with it...
-    Ok(Entry::extract_output(stack))
+// The state of the parser after a recoverable error.
+pub struct ErrorState<Lexer, Parser, Entry>
+    where Parser: LRParser,
+          Lexer: self::Lexer,
+          Entry: EntryPoint<Parser> {
+    state: ParserState<Lexer, Parser, Entry>
+}
+
+// The result of an error recovery operation.
+pub type RecoveryResult<Lexer, Parser, Entry> =
+    ParseResult<ParserState<Lexer, Parser, Entry>,
+                ErrorState<Lexer, Parser, Entry>,
+                ()>;
+
+impl<Parser, Lexer, Entry> ErrorState<Lexer, Parser, Entry>
+    where Parser: LRParser,
+          Lexer: self::Lexer,
+          Lexer::Location: Clone,
+          Entry: EntryPoint<Parser> {
+    pub fn try_recover(mut self) -> RecoveryResult<Lexer, Parser, Entry> {
+        if let Action::Err = Parser::action(self.state.state, Parser::error()) {
+            return match self.state.stack.pop() {
+                Some((state, _)) => {
+                    self.state.state = state;
+                    ParseResult::Error(self)
+                }
+
+                None => ParseResult::Fatal(())
+            }
+        }
+
+        ParseResult::Success(ParserState {
+            lookahead: Parser::error(),
+            .. self.state
+        })
+    }
 }
