@@ -5,7 +5,7 @@ fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
     let menhir  = "../../../src/_stage1/menhir.native";
     let s = Command::new(menhir).args(&["--rust", "-v", "--no-stdlib", "--base"])
-			                          .arg(&format!("{}/parser", out_dir)).arg("src/parser.rsy")
+                                .arg(&format!("{}/parser", out_dir)).arg("src/parser.rsy")
                                 .stdout(Stdio::inherit()).stderr(Stdio::inherit())
                                 .status().unwrap();
     assert!(s.success());
