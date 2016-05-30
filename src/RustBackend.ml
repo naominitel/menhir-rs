@@ -161,7 +161,7 @@ let encode_compressed name (disp, table) ty encode_elem =
      encode_table table_name table ty encode_elem]
 
 (* The type of default reductions entries: Option<SemAct<YYType>>. *)
-let defred_ty = (TApp ("Option", [TApp ("SemAct", [TVar "YYType"])]))
+let defred_ty = (TApp ("Option", [TApp ("SemAct", [TVar "YYType" ; TUsize])]))
 
 let parser_tables_items () =
     let (act_table, goto_table, error_table, default_table) = parser_tables () in
@@ -170,7 +170,9 @@ let parser_tables_items () =
         (function
             | Some act -> EVariant (["Some"], [encode_semact act])
             | None -> EVariant (["None"], [])) ::
-    encode_compressed "ACTION" act_table (TApp ("Action", [TVar "YYType"])) encode_action @
+    encode_compressed "ACTION" act_table
+        (TApp ("Action", [TVar "YYType" ; TUsize]))
+        encode_action @
     encode_compressed "GOTO" goto_table TUsize (fun st  -> EInt st)
 
 let simple_function name args ret_ty ret_expr =
@@ -203,11 +205,13 @@ let parser_type () =
     let trait_impl = ITraitImpl (
         (* impl LRParser for Parser *)
         [], ("LRParser", []), (TVar "Parser"), [
+            IType ("Terminal", TUsize) ;
+            IType ("State", TUsize) ;
             IType ("YYType", (TVar "YYType")) ;
 
             simple_function "action"
                 [(PVar "state", TUsize) ; (PVar "tok", TUsize)]
-                (TApp ("Action", [TVar "YYType"]))
+                (TApp ("Action", [TVar "YYType" ; TUsize]))
                 (EIf (
                     (* if ERROR_TABLE[state * Terminal.n + tok] *)
                     EIndex (EVar "ERROR_TABLE",

@@ -1,4 +1,3 @@
-extern crate env_logger;
 mod parser { include!(concat!(env!("OUT_DIR"), "/parser.rs")); }
 
 fn main() {
@@ -11,7 +10,6 @@ fn main() {
         CL,
         EOF
     ].into_iter();
-    env_logger::init().unwrap();
     match parser::main(&mut input) {
         Ok(res) => println!("res = {:?}", res),
         Err(_)  => panic!("syntax error")

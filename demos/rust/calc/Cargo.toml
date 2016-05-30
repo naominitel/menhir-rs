@@ -6,4 +6,3 @@ build = "build.rs"
 
 [dependencies]
 menhir_runtime = { path = "../../../src/rust_runtime/" }
-env_logger = "*"
