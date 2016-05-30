@@ -10,10 +10,10 @@ fn main() {
                                   ID(format!("x")), ID(format!("y")), CL,
         CL,
         EOF
-    ].into_iter();
+    ].into_iter().enumerate();
     match parser::main(&mut menhir_runtime::IteratorLexer::new(&mut input)) {
         Ok(res) => println!("res = {:?}", res),
-        Err(menhir_runtime::ParserError::SyntaxError) => panic!("syntax error"),
+        Err(menhir_runtime::ParserError::SyntaxError(pos)) => panic!("syntax error at {}", pos),
         Err(menhir_runtime::ParserError::LexerError(err)) => panic!("lexer error: {:?}", err)
     }
     assert!(if let None = input.next() { true } else { false });

@@ -44,35 +44,51 @@ pub trait LRParser {
 }
 
 pub trait Lexer {
+    type Location;
     type Token;
     type Error;
 
-    fn input(&mut self) -> Result<(Self::Token), Self::Error>;
+    fn input(&mut self) -> Result<(Self::Location, Self::Token), Self::Error>;
 }
 
 // Convert an iterator into a lexer.
-pub struct IteratorLexer<Iter>(Iter) where Iter: Iterator;
+pub struct IteratorLexer<Iter, Loc, Tok>
+    where Iter: Iterator<Item = (Loc, Tok)> {
+    iter: Iter,
+    last_pos: Loc,
+    marker: ::std::marker::PhantomData<(Loc, Tok)>
+}
 
+/// The parser reached EOF while it was still expecting input. This
+/// error can only be raised when using an IteratorLexer as input.
 #[derive(Clone, Copy, Debug)]
-pub struct UnexpectedEof;
+pub struct UnexpectedEof<Location>(pub Location);
 
-impl<Iter> Lexer for IteratorLexer<Iter>
-    where Iter: Iterator {
-    type Token = Iter::Item;
-    type Error = UnexpectedEof;
+impl<Iter, Loc, Tok> Lexer for IteratorLexer<Iter, Loc, Tok>
+    where Loc: Clone, Iter: Iterator<Item = (Loc, Tok)> {
+    type Location = Loc;
+    type Token = Tok;
+    type Error = UnexpectedEof<Self::Location>;
 
-    fn input(&mut self) -> Result<Self::Token, Self::Error> {
-        let &mut IteratorLexer(ref mut iter) = self;
-        match iter.next() {
-            Some(tok) => Ok(tok),
-            None => Err(UnexpectedEof)
+    fn input(&mut self) -> Result<(Loc, Tok), Self::Error> {
+        match self.iter.next() {
+            Some((pos, tok)) => {
+                self.last_pos = pos.clone();
+                Ok((pos, tok))
+            }
+            None => Err(UnexpectedEof(self.last_pos.clone()))
         }
     }
 }
 
-impl<Iter> IteratorLexer<Iter> where Iter: Iterator {
+impl<Iter, Loc, Tok> IteratorLexer<Iter, Loc, Tok>
+    where Loc: Default, Iter: Iterator<Item = (Loc, Tok)> {
     pub fn new(lex: Iter) -> Self {
-        IteratorLexer(lex)
+        IteratorLexer {
+            iter: lex,
+            last_pos: Loc::default(),
+            marker: ::std::marker::PhantomData
+        }
     }
 }
 
@@ -80,7 +96,7 @@ impl<Iter> IteratorLexer<Iter> where Iter: Iterator {
 #[derive(Debug)]
 pub enum ParserError<Lexer: self::Lexer> {
     // The parser encountered a syntax error that couldn't be recovered.
-    SyntaxError,
+    SyntaxError(Lexer::Location),
 
     // The lexer encountered an error, typically an IO error.
     LexerError(Lexer::Error)
@@ -98,8 +114,8 @@ pub fn parse<Lexer, Parser>(mut lexer: &mut Lexer, initial: Parser::State)
     let mut stack = Vec::new();
 
     // the current token and its semantic data
-    let (mut yylval, mut tok) = match lexer.input() {
-        Ok(tok) => tok.into(),
+    let (mut pos, (mut yylval, mut tok)) = match lexer.input() {
+        Ok((pos, tok)) => (pos, tok.into()),
         Err(err) => return Err(ParserError::LexerError(err))
     };
 
@@ -118,13 +134,14 @@ pub fn parse<Lexer, Parser>(mut lexer: &mut Lexer, initial: Parser::State)
                 }
 
                 // discard
-                let (nval, ntok) = match lexer.input() {
-                    Ok(tok) => tok.into(),
+                let (npos, (nval, ntok)) = match lexer.input() {
+                    Ok((pos, tok)) => (pos, tok.into()),
                     Err(err) =>
                         return Err(ParserError::LexerError(err))
                 };
                 tok = ntok;
                 yylval = nval;
+                pos = npos;
             }
 
             Action::Reduce(Some(reduce)) => {
@@ -138,7 +155,7 @@ pub fn parse<Lexer, Parser>(mut lexer: &mut Lexer, initial: Parser::State)
             }
 
             Action::Reduce(None) => break,
-            Action::Err => return Err(ParserError::SyntaxError)
+            Action::Err => return Err(ParserError::SyntaxError(pos))
         }
     }
 
