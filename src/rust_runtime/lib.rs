@@ -92,6 +92,21 @@ impl<Iter, Loc, Tok> IteratorLexer<Iter, Loc, Tok>
     }
 }
 
+// Describe a possible entry point of the given parser.
+pub trait EntryPoint<Parser: LRParser> {
+    type Output;
+
+    fn extract_output(stack: Stack<Parser::YYType, Parser::State>) -> Self::Output;
+    fn initial() -> Parser::State;
+
+    fn parse<Lexer>(lexer: &mut Lexer) -> Result<Self::Output, ParserError<Lexer>>
+        where Lexer: self::Lexer,
+              Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
+              Self: std::marker::Sized {
+        parse::<Lexer, Parser, Self>(lexer)
+    }
+}
+
 // A fatal (non-recoverable parsing error).
 #[derive(Debug)]
 pub enum ParserError<Lexer: self::Lexer> {
@@ -102,15 +117,16 @@ pub enum ParserError<Lexer: self::Lexer> {
     LexerError(Lexer::Error)
 }
 
-pub fn parse<Lexer, Parser>(mut lexer: &mut Lexer, initial: Parser::State)
-                            -> Result<Stack<Parser::YYType, Parser::State>,
-                                      ParserError<Lexer>>
+pub fn parse<Lexer, Parser, Entry>(mut lexer: &mut Lexer)
+                                   -> Result<Entry::Output,
+                                             ParserError<Lexer>>
     where Lexer: self::Lexer,
           Parser: LRParser,
+          Entry: EntryPoint<Parser>,
           Lexer::Token: Into<(Parser::YYType, Parser::Terminal)> {
 
     // the current state
-    let mut state = initial;
+    let mut state = Entry::initial();
     let mut stack = Vec::new();
 
     // the current token and its semantic data
@@ -163,5 +179,5 @@ pub fn parse<Lexer, Parser>(mut lexer: &mut Lexer, initial: Parser::State)
     // YYType variant that corresponds to the start symbol. We don't have this
     // information here so we just return the stack and let the generated code
     // do something with it...
-    Ok(stack)
+    Ok(Entry::extract_output(stack))
 }

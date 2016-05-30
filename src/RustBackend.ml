@@ -192,7 +192,7 @@ let compressed_index table idx1 idx2 =
                  TUsize))
 
 let parser_type () =
-    let struct_ = INewtype ("Parser", []) in
+    let struct_ = INewtype (false, "Parser", []) in
     let impl = IImpl (TVar "Parser", [
         (* The GOTO function is not exposed. *)
         simple_function
@@ -364,38 +364,20 @@ let entry_points () =
         (fun _ init_st nt ty acc ->
              let Stretch.Declared(ty) = ty in
              let name = Nonterminal.print false nt in
-             IFn (true, name, {
-                 generics = ["Lex"] ;
-                 where_clauses = [
-                     (["Lex"], ("Lexer", [])) ;
-                     (["Lex" ; "Token"],
-                      ("Into", [TrPType (TTup [TVar "YYType" ; TUsize])]))
-                 ] ;
-                 self = SelfNone ;
-                 args = [(PVar "lexer", TRefMut (TVar "Lex"))] ;
-                 ret = TApp ("Result", [TTextual ty ;
-                                        TApp ("ParserError", [TVar "Lex"])]) ;
-                 body = {
-                     stmts = [
-                         SLet (PMut "stack", None, EMac (
-                             "try", Some (ECall (
-                                 ["menhir_runtime" ; "parse"],
-                                 [TVar "Lex" ; TVar "Parser"],
-                                 [EVar "lexer" ; EInt (Lr1.number init_st)]
-                             ))
-                         ))
-                     ] ;
-
-                     ret = Some (EMatch (
+             INewtype (true, name, []) ::
+             ITraitImpl ([], ("EntryPoint", [TVar "Parser"]), TVar name, [
+                 IType ("Output", TTextual ty) ;
+                 simple_function "extract_output"
+                     [(PMut "stack", TApp ("Stack", [TVar "YYType" ; TUsize]))]
+                     (TTextual ty) (EMatch (
                          EMeth (EMeth (EVar "stack", "pop", []), "unwrap", []),
                          [(PTup [PWildcard ;
                                  PVariant (["YYType" ; name], [PVar "data"])],
-                           EVariant (["Ok"], [EVar "data"])) ;
-                          (PWildcard, EMac ("unreachable", None))
-                         ]
-                     ))
-                 }
-             }) :: acc)
+                           EVar "data") ;
+                          (PWildcard, EMac ("unreachable", None))]
+                     )) ;
+                 simple_function "initial" [] TUsize (EInt (Lr1.number init_st))
+             ]) :: acc)
         []
 
 let items () =
@@ -403,8 +385,8 @@ let items () =
     IUse ["self" ; "menhir_runtime" ; "Action"] ::
     IUse ["self" ; "menhir_runtime" ; "SemAct"] ::
     IUse ["self" ; "menhir_runtime" ; "LRParser"] ::
-    IUse ["self" ; "menhir_runtime" ; "Lexer"] ::
-    IUse ["self" ; "menhir_runtime" ; "ParserError"] ::
+    IUse ["self" ; "menhir_runtime" ; "EntryPoint"] ::
+    IUse ["self" ; "menhir_runtime" ; "Stack"] ::
     parser_enums () @ parser_tables_items () @ parser_type () @
     semantic_actions () @ [into_impl ()] @ entry_points ()
 

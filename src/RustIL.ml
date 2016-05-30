@@ -83,7 +83,7 @@ type item =
     | IEnum of bool * string * (string * ty list) list
     | IGlob of string * glob_kind * ty * expr
     | IFn of bool * string * fn_def
-    | INewtype of string * ty list
+    | INewtype of bool * string * ty list
     | ITraitImpl of (string * trait_bound) list * trait * ty * item list
     | IImpl of ty * item list
     | IType of string * ty
@@ -231,8 +231,10 @@ let rec pp_item ff = function
                              (fun ff (t, b) -> fprintf ff "%a: %a" pp_path t pp_bound b)
                              ", ") l) ()
             pp_block body
-    | INewtype (name, tys) ->
-        fprintf ff "struct %a;" (pp_variant pp_print_string pp_ty) (name, tys)
+    | INewtype (pub, name, tys) ->
+        fprintf ff "%sstruct %a;"
+            (if pub then "pub " else "")
+            (pp_variant pp_print_string pp_ty) (name, tys)
     | ITraitImpl (generics, (trait, args), ty, items) ->
         fprintf ff "impl%a %s<%a> for %a {@,@[<v 4>    %a@]@,}"
             (match generics with

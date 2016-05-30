@@ -5,7 +5,7 @@ use menhir_runtime::*;
 
 macro_rules! run(
     ($tokens:expr) => {
-        parser::main(&mut IteratorLexer::new(&mut $tokens.enumerate()))
+        parser::main::parse(&mut IteratorLexer::new(&mut $tokens.enumerate()))
     }
 );
 
