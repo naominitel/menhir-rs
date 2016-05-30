@@ -60,11 +60,13 @@ type trait_bound = string * trait_bound_param list
 type trait = string * ty list
 
 type self_arg =
+    | Self
     | SelfNone
     | SelfRef
 
 type fn_def = {
-    generics: (string * trait_bound) list ;
+    generics: string list ;
+    where_clauses: (path * trait_bound) list ;
     self: self_arg ;
     args: (pattern * ty) list ;
     ret: ty ;
@@ -210,23 +212,23 @@ let rec pp_item ff = function
         fprintf ff "%s %s: %a = %a;"
             (match kind with KStatic -> "static" | KConst -> "const")
             name pp_ty ty pp_expr expr
-    | IFn (pub, name, { generics ; self ; args ; ret ; body }) ->
+    | IFn (pub, name, { generics ; where_clauses ; self ; args ; ret ; body }) ->
         fprintf ff "%sfn %s%a(%s%a) -> %a%a %a"
             (if pub then "pub " else "") name
             (match generics with
                 | [] -> fun _ () -> ()
                 | l -> fun ff () ->
                     fprintf ff "<%a>"
-                        (pp_list (fun ff (t, _) -> fprintf ff "%s" t) ", ") l) ()
-            (match self with SelfRef -> "&self, " | SelfNone -> "")
+                        (pp_list pp_print_string ", ") l) ()
+            (match self with Self -> "self" | SelfRef -> "&self, " | SelfNone -> "")
             (pp_list (fun ff (p, t) -> fprintf ff "%a: %a" pp_pat p pp_ty t) ", ") args
             pp_ty ret
-            (match generics with
+            (match where_clauses with
                 | [] -> fun _ () -> ()
                 | l -> fun ff () ->
                     fprintf ff "@,@[<hv 4>@,where @[<v>%a@]@]"
                         (pp_list
-                             (fun ff (t, b) -> fprintf ff "%s: %a" t pp_bound b)
+                             (fun ff (t, b) -> fprintf ff "%a: %a" pp_path t pp_bound b)
                              ", ") l) ()
             pp_block body
     | INewtype (name, tys) ->

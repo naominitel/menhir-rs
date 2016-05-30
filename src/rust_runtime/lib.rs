@@ -41,19 +41,29 @@ pub trait LRParser {
     fn action(state: usize, token: usize) -> Action<Self::YYType>;
 }
 
-pub fn parse<Token, Lexer, Parser>(
-        mut lexer: &mut Lexer,
-        next_token: fn(&mut Lexer) -> (Parser::YYType, usize),
-        initial: usize
-    ) -> Result<Stack<Parser::YYType>, ()>
-    where Lexer: Iterator<Item = Token>, Parser: LRParser {
+fn next_token<Lexer, Parser>(lexer: &mut Lexer)
+                             -> Result<(Parser::YYType, usize), ()>
+    where Lexer: Iterator,
+          Parser: LRParser,
+          Lexer::Item: Into<(Parser::YYType, usize)> {
+    match lexer.next() {
+        Some(tok) => Ok(tok.into()),
+        None => Err(())
+    }
+}
+
+pub fn parse<Lexer, Parser>(mut lexer: &mut Lexer, initial: usize)
+                            -> Result<Stack<Parser::YYType>, ()>
+    where Lexer: Iterator,
+          Parser: LRParser,
+          Lexer::Item: Into<(Parser::YYType, usize)> {
 
     // the current state
     let mut state = initial;
     let mut stack = Vec::new();
 
     // the current token and its semantic data
-    let (mut yylval, mut tok) = next_token(&mut lexer);
+    let (mut yylval, mut tok) = try!(next_token::<_, Parser>(&mut lexer));
 
     // the parsing loop
     'a: loop {
@@ -72,7 +82,7 @@ pub fn parse<Token, Lexer, Parser>(
                 }
 
                 // discard
-                let (nval, ntok) = next_token(&mut lexer);
+                let (nval, ntok) = try!(next_token::<_, Parser>(&mut lexer));
                 tok = ntok;
                 yylval = nval;
             }

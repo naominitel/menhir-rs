@@ -36,7 +36,7 @@ let parser_enums () =
     in
 
     [IEnum (true, "Token", terminals) ;
-     IEnum (false, "YYType", terminals @ nonterminals)]
+     IEnum (true, "YYType", terminals @ nonterminals)]
 
 (* The type of actions (entries in the ACTION table)
  * There is no Accept action, we consider reduction by a start production as an
@@ -176,6 +176,7 @@ let parser_tables_items () =
 let simple_function name args ret_ty ret_expr =
     IFn (false, name, {
         generics = [] ;
+        where_clauses = [] ;
         self = SelfNone ;
         args = args ;
         ret = ret_ty ;
@@ -297,6 +298,7 @@ let semantic_actions () =
              IFn (
                  false, (Format.sprintf "rule_%d" (Production.p2i r)), {
                      generics = [] ;
+                     where_clauses = [] ;
                      self = SelfNone ;
                      args = [(state_pat, TUsize) ;
                              (PVar "stack",
@@ -319,51 +321,39 @@ let semantic_actions () =
                  }
              ))
 
-(* The next_token function.
- * This function is the interface between the lexer and the parser. It translates
+(* This function is the interface between the lexer and the parser. It translates
  * tokens from the external representation used by the lexer (the Token enum) to
  * the internal representation: a tuple of the terminal number and a semantic
  * value with the YYType type.
  * This has to be in the generated code instead of the runtime because we need
  * to know the name of the YYType variants for each token. *)
-let next_token () =
-    IFn (
-        false, "next_tok", {
-            generics = [("Lexer", ("Iterator", [TrPAssoc ("Item", TVar "Token")]))] ;
-            self = SelfNone ;
-            args = [(PVar "lexer", TRefMut (TVar "Lexer"))] ;
-            ret = TTup [TVar "YYType" ; TUsize] ;
-            body = {
-                stmts = [
-                    SLet (PVar "tok", None, EMatch (
-                        EMeth (EVar "lexer", "next", []), [
-                            (PVariant (["Some"], [PVar "t"]), EVar "t") ;
-                            (PVariant (["None"], []), EReturn (ETup [
-                                 EUnsafe (ECall (
-                                     ["" ; "std" ; "mem" ; "uninitialized"],
-                                     [], []
-                                 )) ;
-                                 EInt (Terminal.t2i @@ Terminal.sharp)
-                             ]))
-                        ]
+let into_impl () =
+    ITraitImpl ([], ("Into", [TTup [TVar "YYType" ; TUsize]]), TVar "Token", [
+        IFn (
+            false, "into", {
+                generics = [] ;
+                where_clauses = [] ;
+                self = Self ;
+                args = [] ;
+                ret = TTup [TVar "YYType" ; TUsize] ;
+                body = {
+                    stmts = [] ;
+                    ret = Some (EMatch (EVar "self",
+                        Terminal.map_real
+                            (fun t -> Terminal.(
+                                let (pats, exprs) = match ocamltype t with
+                                    | None -> ([], [])
+                                    | Some _ -> ([PVar "data"], [EVar "data"])
+                                in
+
+                                (PVariant (["Token" ; print t], pats),
+                                  ETup [EVariant (["YYType" ; print t], exprs) ;
+                                        EInt (t2i t)])))
                     ))
-                ] ;
-
-                ret = Some (EMatch (EVar "tok",
-                    Terminal.map_real
-                        (fun t -> Terminal.(
-                             let (pats, exprs) = match ocamltype t with
-                                 | None -> ([], [])
-                                 | Some _ -> ([PVar "data"], [EVar "data"])
-                             in
-
-                             (PVariant (["Token" ; print t], pats),
-                              ETup [EVariant (["YYType" ; print t], exprs) ;
-                                    EInt (t2i t)])))
-                ))
+                }
             }
-        }
-    )
+        )
+    ])
 
 let entry_points () =
     Lr1.fold_entry
@@ -371,7 +361,12 @@ let entry_points () =
              let Stretch.Declared(ty) = ty in
              let name = Nonterminal.print false nt in
              IFn (true, name, {
-                 generics = [("Lexer", ("Iterator", [TrPAssoc ("Item", TVar "Token")]))] ;
+                 generics = ["Lexer"] ;
+                 where_clauses = [
+                     (["Lexer"], ("Iterator", [])) ;
+                     (["Lexer" ; "Item"],
+                      ("Into", [TrPType (TTup [TVar "YYType" ; TUsize])]))
+                 ] ;
                  self = SelfNone ;
                  args = [(PVar "lexer", TRefMut (TVar "Lexer"))] ;
                  ret = TApp ("Result", [TTextual ty ; TUnit]) ;
@@ -380,9 +375,8 @@ let entry_points () =
                          SLet (PMut "stack", None, EMac (
                              "try", Some (ECall (
                                  ["menhir_runtime" ; "parse"],
-                                 [TVar "Token" ; TVar "Lexer" ; TVar "Parser"],
-                                 [EVar "lexer" ; EVar "next_tok" ;
-                                  EInt (Lr1.number init_st)]
+                                 [TVar "Lexer" ; TVar "Parser"],
+                                 [EVar "lexer" ; EInt (Lr1.number init_st)]
                              ))
                          ))
                      ] ;
@@ -392,7 +386,7 @@ let entry_points () =
                          [(PTup [PWildcard ;
                                  PVariant (["YYType" ; name], [PVar "data"])],
                            EVariant (["Ok"], [EVar "data"])) ;
-                          (PWildcard, EMac ("unreachable", None))                            
+                          (PWildcard, EMac ("unreachable", None))
                          ]
                      ))
                  }
@@ -405,7 +399,7 @@ let items () =
     IUse ["self" ; "menhir_runtime" ; "SemAct"] ::
     IUse ["self" ; "menhir_runtime" ; "LRParser"] ::
     parser_enums () @ parser_tables_items () @ parser_type () @
-    semantic_actions () @ [next_token ()] @ entry_points ()
+    semantic_actions () @ [into_impl ()] @ entry_points ()
 
 let write_all oc =
     let ff = Format.formatter_of_out_channel oc in
