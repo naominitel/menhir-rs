@@ -1,5 +1,8 @@
 extern crate menhir_runtime;
-mod parser { include!(concat!(env!("OUT_DIR"), "/parser.rs")); }
+mod parser {
+    include!(concat!(env!("OUT_DIR"), "/parser.rs"));
+    include!(concat!(env!("OUT_DIR"), "/errors.rs"));
+}
 
 use menhir_runtime::*;
 
@@ -22,13 +25,15 @@ fn main() {
     ].into_iter();
     match run!(&mut input) {
         Ok(res) => println!("res = {:?}", res),
-        Err(ParserError::SyntaxError(pos)) => panic!("syntax error at {}", pos),
+        Err(ParserError::SyntaxError(pos, msg)) =>
+            panic!("syntax error at {}: {}", pos, msg.unwrap_or("")),
         Err(ParserError::LexerError(err)) => panic!("lexer error: {:?}", err)
     }
     assert!(if let None = input.next() { true } else { false });
 
     let input = vec![CL];
-    assert!(if let Err(ParserError::SyntaxError(0)) =
+    assert!(if let Err(ParserError::SyntaxError
+                       (0, Some("Expected the beginning of an expression.\n"))) =
             run!(&mut input.into_iter()) { true } else { false });
 
     let input: Vec<parser::Token> = vec![];

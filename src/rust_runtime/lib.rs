@@ -113,6 +113,7 @@ pub trait EntryPoint<Parser: LRParser> {
         where Lexer: self::Lexer,
               Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
               Lexer::Location: Clone,
+              Parser: LRErrors,
               Self: std::marker::Sized {
         run::<Lexer, Parser, Self>(lex)
     }
@@ -122,7 +123,7 @@ pub trait EntryPoint<Parser: LRParser> {
 #[derive(Debug)]
 pub enum ParserError<Lexer: self::Lexer> {
     // The parser encountered a syntax error that couldn't be recovered.
-    SyntaxError(Lexer::Location),
+    SyntaxError(Lexer::Location, Option<&'static str>),
 
     // The lexer encountered an error, typically an IO error.
     LexerError(Lexer::Error)
@@ -155,13 +156,14 @@ pub fn new<Lexer, Parser, Entry>(mut lex: Lexer)
 }
 
 // Creates a new parser and run it. Equivalent to
-pub fn run<Lexer, Parser, Entry>(lex: Lexer) -> Result<Entry::Output,
-                                                       ParserError<Lexer>>
+pub fn run<Lexer, Parser, Entry>(lex: Lexer)
+                                         -> Result<Entry::Output,
+                                                   ParserError<Lexer>>
     where Lexer: self::Lexer,
-            Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
-            Lexer::Location: Clone,
-            Parser: LRParser,
-            Entry: EntryPoint<Parser> {
+          Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
+          Lexer::Location: Clone,
+          Parser: LRParser + LRErrors,
+          Entry: EntryPoint<Parser> {
     let state = match new::<_, _, Entry>(lex) {
         Ok(state) => state,
         Err(err) => return Err(ParserError::LexerError(err))
@@ -249,7 +251,7 @@ impl<Lexer, Parser, Entry> ParserState<Lexer, Parser, Entry>
 }
 
 impl<Lexer, Parser, Entry> ParserState<Lexer, Parser, Entry>
-    where Parser: LRParser,
+    where Parser: LRParser + LRErrors,
           Lexer: self::Lexer,
           Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
           Lexer::Location: Clone,
@@ -260,7 +262,7 @@ impl<Lexer, Parser, Entry> ParserState<Lexer, Parser, Entry>
                 ParseResult::Success(out) => return Ok(out),
 
                 ParseResult::Error(mut err_state) => {
-                    let last_pos = err_state.state.location.clone();
+                    let (last_pos, last_err) = err_state.report_error();
 
                     loop {
                         match err_state.try_recover() {
@@ -270,7 +272,9 @@ impl<Lexer, Parser, Entry> ParserState<Lexer, Parser, Entry>
                             }
 
                             ParseResult::Fatal(()) =>
-                                return Err(ParserError::SyntaxError(last_pos)),
+                                return Err(ParserError::SyntaxError(
+                                    last_pos, last_err
+                                )),
 
                             ParseResult::Error(new_err_state) =>
                                 err_state = new_err_state
@@ -299,10 +303,16 @@ pub type RecoveryResult<Lexer, Parser, Entry> =
                 ()>;
 
 impl<Parser, Lexer, Entry> ErrorState<Lexer, Parser, Entry>
-    where Parser: LRParser,
+    where Parser: LRParser + LRErrors,
           Lexer: self::Lexer,
           Lexer::Location: Clone,
           Entry: EntryPoint<Parser> {
+    // Give a proper error message to describe the situation in which the
+    // parser entered error-handling mode.
+    pub fn report_error(&self) -> (Lexer::Location, Option<&'static str>) {
+        (self.state.location.clone(), Parser::message(self.state.state))
+    }
+
     pub fn try_recover(mut self) -> RecoveryResult<Lexer, Parser, Entry> {
         if let Action::Err = Parser::action(self.state.state, Parser::error()) {
             return match self.state.stack.pop() {
@@ -320,4 +330,9 @@ impl<Parser, Lexer, Entry> ErrorState<Lexer, Parser, Entry>
             .. self.state
         })
     }
+}
+
+// Types that can convert errors to a detailed message.
+pub trait LRErrors: LRParser {
+    fn message(state: Self::State) -> Option<&'static str>;
 }

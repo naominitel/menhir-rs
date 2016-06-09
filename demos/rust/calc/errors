@@ -1,0 +1,148 @@
+main: INT DIV TIMES 
+##
+## Ends in an error in state: 10.
+##
+## expr -> expr DIV . expr [ TIMES PLUS MINUS EOL DIV CL ]
+##
+## The known suffix of the stack is as follows:
+## expr DIV 
+##
+
+Unexpected token. Expected an expression.
+
+main: INT MINUS INT OP 
+##
+## Ends in an error in state: 13.
+##
+## expr -> expr . PLUS expr [ TIMES PLUS MINUS EOL DIV CL ]
+## expr -> expr . MINUS expr [ TIMES PLUS MINUS EOL DIV CL ]
+## expr -> expr MINUS expr . [ TIMES PLUS MINUS EOL DIV CL ]
+## expr -> expr . TIMES expr [ TIMES PLUS MINUS EOL DIV CL ]
+## expr -> expr . DIV expr [ TIMES PLUS MINUS EOL DIV CL ]
+##
+## The known suffix of the stack is as follows:
+## expr MINUS expr 
+##
+
+Unexpected token. Expected an operator.
+
+main: INT MINUS TIMES 
+##
+## Ends in an error in state: 12.
+##
+## expr -> expr MINUS . expr [ TIMES PLUS MINUS EOL DIV CL ]
+##
+## The known suffix of the stack is as follows:
+## expr MINUS 
+##
+
+Unexpected token. Expected an expression.
+
+main: INT OP 
+##
+## Ends in an error in state: 16.
+##
+## expr -> expr . PLUS expr [ TIMES PLUS MINUS EOL DIV ]
+## expr -> expr . MINUS expr [ TIMES PLUS MINUS EOL DIV ]
+## expr -> expr . TIMES expr [ TIMES PLUS MINUS EOL DIV ]
+## expr -> expr . DIV expr [ TIMES PLUS MINUS EOL DIV ]
+## main -> expr . EOL [ # ]
+##
+## The known suffix of the stack is as follows:
+## expr 
+##
+
+Unexpected token. Expected an operator.
+
+main: INT PLUS INT OP 
+##
+## Ends in an error in state: 9.
+##
+## expr -> expr . PLUS expr [ TIMES PLUS MINUS EOL DIV CL ]
+## expr -> expr PLUS expr . [ TIMES PLUS MINUS EOL DIV CL ]
+## expr -> expr . MINUS expr [ TIMES PLUS MINUS EOL DIV CL ]
+## expr -> expr . TIMES expr [ TIMES PLUS MINUS EOL DIV CL ]
+## expr -> expr . DIV expr [ TIMES PLUS MINUS EOL DIV CL ]
+##
+## The known suffix of the stack is as follows:
+## expr PLUS expr 
+##
+
+Unexpected token. Expected an operator.
+
+main: INT PLUS TIMES 
+##
+## Ends in an error in state: 8.
+##
+## expr -> expr PLUS . expr [ TIMES PLUS MINUS EOL DIV CL ]
+##
+## The known suffix of the stack is as follows:
+## expr PLUS 
+##
+
+Unexpected token. Expected an expression.
+
+main: INT TIMES TIMES 
+##
+## Ends in an error in state: 6.
+##
+## expr -> expr TIMES . expr [ TIMES PLUS MINUS EOL DIV CL ]
+##
+## The known suffix of the stack is as follows:
+## expr TIMES 
+##
+
+Unexpected token. Expected an expression.
+
+main: MINUS TIMES 
+##
+## Ends in an error in state: 2.
+##
+## expr -> MINUS . expr [ TIMES PLUS MINUS EOL DIV CL ]
+##
+## The known suffix of the stack is as follows:
+## MINUS 
+##
+
+Unexpected token. Expected an expression.
+
+main: OP INT OP 
+##
+## Ends in an error in state: 5.
+##
+## expr -> OP expr . CL [ TIMES PLUS MINUS EOL DIV CL ]
+## expr -> expr . PLUS expr [ TIMES PLUS MINUS DIV CL ]
+## expr -> expr . MINUS expr [ TIMES PLUS MINUS DIV CL ]
+## expr -> expr . TIMES expr [ TIMES PLUS MINUS DIV CL ]
+## expr -> expr . DIV expr [ TIMES PLUS MINUS DIV CL ]
+##
+## The known suffix of the stack is as follows:
+## OP expr 
+##
+
+Unexpected token. Expected an operator.
+
+main: OP TIMES 
+##
+## Ends in an error in state: 1.
+##
+## expr -> OP . expr CL [ TIMES PLUS MINUS EOL DIV CL ]
+##
+## The known suffix of the stack is as follows:
+## OP 
+##
+
+Unexpected token. Expected an expression.
+
+main: TIMES 
+##
+## Ends in an error in state: 0.
+##
+## main' -> . main [ # ]
+##
+## The known suffix of the stack is as follows:
+## 
+##
+
+Unexpected token. Expected an expression.
+

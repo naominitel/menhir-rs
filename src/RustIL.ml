@@ -7,25 +7,27 @@ type ty =
     | TApp of string * ty list
     | TArray of ty * int
     | TTup of ty list
-    | TRef of ty
-    | TRefMut of ty
+    | TRef of bool * string option * ty
     | TTextual of Stretch.t
 
 type path = string list
 
 type pattern =
+    | PInt of int
     | PVar of string
     | PMut of string
     | PRef of string
     | PVariant of path * pattern list
     | PTup of pattern list
     | PDeref of pattern
+    | POr of pattern list
     | PWildcard
 
 type expr =
     | EInt of int
     | EBool of bool
     | EArray of expr array
+    | EString of string
     | ETup of expr list
     | EVar of string
     | EVariant of path * expr list
@@ -57,7 +59,7 @@ type trait_bound_param =
 
 type trait_bound = string * trait_bound_param list
 
-type trait = string * ty list
+type trait = path * ty list
 
 type self_arg =
     | Self
@@ -119,8 +121,11 @@ let rec pp_ty ff = function
                  pp_ty) a
     | TArray (t, n) -> fprintf ff "[%a ; %d]" pp_ty t n
     | TTup tys -> fprintf ff "(%a)" (pp_list pp_ty ", ") tys
-    | TRef ty -> fprintf ff "&%a" pp_ty ty
-    | TRefMut ty -> fprintf ff "&mut %a" pp_ty ty
+    | TRef (mut, lifetime, ty) ->
+        fprintf ff "&%s%s%a"
+            (match lifetime with Some l -> Format.sprintf "'%s " l | None -> "")
+            (if mut then "mut " else "")
+            pp_ty ty
     | TTextual s -> fprintf ff "%s" (String.trim s.Stretch.stretch_content)
 
 let pp_variant p_ctor p_args ff = function
@@ -130,12 +135,14 @@ let pp_variant p_ctor p_args ff = function
 let pp_path = pp_list pp_print_string "::"
 
 let rec pp_pat ff = function
+    | PInt i -> fprintf ff "%d" i
     | PVar v -> fprintf ff "%s" v
     | PMut v -> fprintf ff "mut %s" v
     | PRef v -> fprintf ff "ref %s" v
     | PVariant (v, a) -> pp_variant pp_path pp_pat ff (v, a)
     | PTup pats -> fprintf ff "(%a)" (pp_list pp_pat ", ") pats
     | PDeref p -> fprintf ff "&%a" pp_pat p
+    | POr pats -> fprintf ff "%a" (pp_list pp_pat " | ") pats
     | PWildcard -> fprintf ff "_"
 
 let rec pp_expr ff = function
@@ -144,6 +151,7 @@ let rec pp_expr ff = function
     | EArray arr ->
         fprintf ff "[@,@[<hov 4>    @,%a@]]"
             (pp_array pp_expr (fun ff () -> fprintf ff ",@ ")) arr
+    | EString str -> fprintf ff "\"%s\"" (String.escaped str)
     | ETup exprs -> fprintf ff "(%a)" (pp_list pp_expr ", ") exprs
     | EVar v -> fprintf ff "%s" v
     | EVariant (v, a) -> pp_variant pp_path pp_expr ff (v, a)
@@ -236,13 +244,13 @@ let rec pp_item ff = function
             (if pub then "pub " else "")
             (pp_variant pp_print_string pp_ty) (name, tys)
     | ITraitImpl (generics, (trait, args), ty, items) ->
-        fprintf ff "impl%a %s<%a> for %a {@,@[<v 4>    %a@]@,}"
+        fprintf ff "impl%a %a<%a> for %a {@,@[<v 4>    %a@]@,}"
             (match generics with
                 | [] -> fun _ () -> ()
                 | l -> fun ff () ->
                     fprintf ff "<%a>"
                         (pp_list (fun ff (t, _) -> fprintf ff "%s" t) ", ") l) ()
-            trait (pp_list pp_ty ", ") args pp_ty ty
+            pp_path trait (pp_list pp_ty ", ") args pp_ty ty
             (pp_print_list ?pp_sep:(Some (fun ff () -> fprintf ff "@,@,")) pp_item)
             items
     | IImpl (ty, items) ->

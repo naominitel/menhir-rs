@@ -204,7 +204,7 @@ let parser_type () =
     ]) in
     let trait_impl = ITraitImpl (
         (* impl LRParser for Parser *)
-        [], ("LRParser", []), (TVar "Parser"), [
+        [], (["LRParser"], []), (TVar "Parser"), [
             IType ("Terminal", TUsize) ;
             simple_function "error"
                 [] TUsize (EInt (Terminal.t2i Terminal.error)) ;
@@ -309,8 +309,10 @@ let semantic_actions () =
                      self = SelfNone ;
                      args = [(state_pat, TUsize) ;
                              (PVar "stack",
-                              TRefMut (TApp ("Vec", [TTup [TVar "usize" ;
-                                                           TVar "YYType"]])))] ;
+                              TRef (
+                                  true, None,
+                                  TApp ("Vec", [TTup [TVar "usize" ; TVar "YYType"]])
+                              ))] ;
                      ret = TUsize ;
                      body = {
                          stmts = stmts @ [SExpr (
@@ -335,7 +337,7 @@ let semantic_actions () =
  * This has to be in the generated code instead of the runtime because we need
  * to know the name of the YYType variants for each token. *)
 let into_impl () =
-    ITraitImpl ([], ("Into", [TTup [TVar "YYType" ; TUsize]]), TVar "Token", [
+    ITraitImpl ([], (["Into"], [TTup [TVar "YYType" ; TUsize]]), TVar "Token", [
         IFn (
             false, "into", {
                 generics = [] ;
@@ -368,7 +370,7 @@ let entry_points () =
              let Stretch.Declared(ty) = ty in
              let name = Nonterminal.print false nt in
              INewtype (true, name, []) ::
-             ITraitImpl ([], ("EntryPoint", [TVar "Parser"]), TVar name, [
+             ITraitImpl ([], (["EntryPoint"], [TVar "Parser"]), TVar name, [
                  IType ("Output", TTextual ty) ;
                  simple_function "extract_output"
                      [(PMut "stack", TApp ("Stack", [TVar "YYType" ; TUsize]))]
@@ -401,3 +403,31 @@ let write_all oc =
         Front.grammar.UnparameterizedSyntax.preludes ;
     Format.pp_print_flush ff () ;
     close_out oc
+
+let compile_errors filename branches =
+    let ff = Format.std_formatter in
+    RustIL.pp_program ff [
+        ITraitImpl (
+            [], (["" ; "menhir_runtime" ; "LRErrors"], []), TVar "Parser", [
+            IFn (false, "message", {
+                generics = [] ;
+                where_clauses = [] ;
+                self = SelfNone ;
+                args = [(PVar "state", TUsize)] ;
+                ret = TApp ("Option",
+                            [TRef (false, Some "static", TVar "str")]) ;
+                body = {
+                    stmts = [] ;
+                    ret = Some(EMatch (
+                        EVar ("state"),
+                        List.fold_left
+                            (fun arms (sts, msg) ->
+                                (POr (List.map (fun s -> PInt s) sts),
+                                  EVariant (["Some"], [EString msg])) :: arms)
+                            [(PWildcard, EVariant (["None"], []))] branches
+                    ))
+                }
+            })
+        ])
+    ] ;
+    Format.pp_print_flush ff ()

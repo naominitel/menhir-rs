@@ -556,8 +556,16 @@ let message_table (detect_redundancy : bool) (runs : filtered_targeted_run list)
    a mapping of state numbers to error messages. The code is sent to the
    standard output channel. *)
 
-let compile_runs filename (runs : filtered_targeted_run list) : unit =
+let compile_runs (runs : filtered_targeted_run list): (int list * string) list =
+  List.fold_left (fun branches (sentences_and_states, message) ->
+    let states = List.map (fun (_, target) ->
+      Lr1.number @@ target2state target
+    ) sentences_and_states in
+    (* Map all these states to this message. *)
+    (states, message) :: branches
+  ) [] runs
 
+let compile_ocaml filename (branches: (int list * string) list) =
   (* We wish to produce a function that maps a state number to a message.
      By convention, we call this function [message]. *)
 
@@ -572,16 +580,12 @@ let compile_runs filename (runs : filtered_targeted_run list) : unit =
      the user, who can then produce a generic error message. *)
   } in
   let branches =
-    List.fold_left (fun branches (sentences_and_states, message) ->
-      (* Create an or-pattern for these states. *)
-      let states = List.map (fun (_, target) ->
-        let s = target2state target in
-        pint (Lr1.number s)
-      ) sentences_and_states in
-      (* Map all these states to this message. *)
-      { branchpat = POr states;
+    List.fold_left (fun branches (states, message) ->
+      (* Create an or-pattern for these states.
+         Map all these states to this message. *)
+      { branchpat = POr (List.map pint states) ;
         branchbody = EStringConst message } :: branches
-    ) [ default ] runs
+    ) [ default ] branches
   in
   let messagedef = {
     valpublic = true;
@@ -639,7 +643,9 @@ let () =
     (* Now, compile this information down to OCaml code. We wish to
        produce a function that maps a state number to a message. By
        convention, we call this function [message]. *)
-    compile_runs filename runs;
+    let branches = compile_runs runs in
+    if Settings.rust then RustBackend.compile_errors filename branches
+    else compile_ocaml filename branches ;
 
     exit 0
   )
