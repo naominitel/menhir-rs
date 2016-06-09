@@ -105,7 +105,7 @@ pub trait EntryPoint<Parser: LRParser> {
                   -> Result<ParserState<Lexer, Parser, Self>, Lexer::Error>
         where Lexer: self::Lexer,
               Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
-              Self: std::marker::Sized {
+              Self: ::std::marker::Sized {
         new::<Lexer, Parser, Self>(lex)
     }
 
@@ -113,8 +113,7 @@ pub trait EntryPoint<Parser: LRParser> {
         where Lexer: self::Lexer,
               Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
               Lexer::Location: Clone,
-              Parser: LRErrors,
-              Self: std::marker::Sized {
+              Self: ::std::marker::Sized {
         run::<Lexer, Parser, Self>(lex)
     }
 }

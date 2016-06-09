@@ -18,7 +18,7 @@ fn main() {
     let mut input = vec![
         OP, LAMBDA, ID(format!("x")), DOT, ID(format!("x")), CL,
         OP, LAMBDA, ID(format!("x")), DOT, LAMBDA, ID(format!("y")), DOT,
-            ID(format!("x")), OP, LAMBDA, ID(format!("x")), DOT,
+           ID(format!("x")), OP, LAMBDA, ID(format!("x")), DOT,
                                   ID(format!("x")), ID(format!("y")), CL,
         CL,
         EOF

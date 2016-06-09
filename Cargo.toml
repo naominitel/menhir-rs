@@ -1,0 +1,12 @@
+[package]
+name = "menhir"
+version = "0.0.1"
+authors = ["Naomi Nitel <naominitel@gmail.com>"]
+description = "An LR(1) parser generator."
+homepage = "http://gallium.inria.fr/~fpottier/menhir/"
+license = "QPL-1.0/LGPL-2.0"
+build = "src/rust/build.rs"
+
+[lib]
+name = "menhir"
+path = "src/rust/lib.rs"

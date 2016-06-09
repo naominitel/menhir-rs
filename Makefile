@@ -176,6 +176,7 @@ install:
 	  echo Installing MenhirLib manually. ; \
 	  install -m 644 $(patsubst %,$(BUILDDIR)/%,$(MENHIRLIB)) $(libdir) ; \
 	fi
+	install src/libmenhir_runtime.rlib $(libdir)
 # Install the documentation, if it has been built.
 	if [ -f manual.pdf ] ; then \
 	  mkdir -p $(docdir) ; \
