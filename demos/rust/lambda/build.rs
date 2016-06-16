@@ -1,6 +1,9 @@
 extern crate menhir;
+use std::path::Path;
 
 fn main() {
-    menhir::process_file(::std::path::Path::new("src/parser.rsy"), &[]);
+    let grammar = Path::new("src/parser.rsy");
+    menhir::process_file(grammar, &[]);
+    menhir::compile_errors(Path::new("errors"), grammar, &[]);
     menhir::cargo_rustc_flags().unwrap();
 }

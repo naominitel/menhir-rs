@@ -2,12 +2,15 @@ pub use MenhirOption::*;
 pub use OnlyPreprocessOption::*;
 pub use SuggestOption::*;
 
+use std::fs::File;
+use std::os::unix::io::{FromRawFd, IntoRawFd};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 pub enum MenhirOption {
     Base(PathBuf),
     Canonical,
+    CompileErrors(PathBuf),
     Dump,
     Explain,
     Graph,
@@ -42,6 +45,7 @@ pub fn add_option<'a>(cmd: &'a mut Command, opt: &MenhirOption) -> &'a mut Comma
     match *opt {
         Base(ref pth)           => cmd.args(&["--base", &format!("{}", pth.display())]),
         Canonical               => cmd.arg("--canonical"),
+        CompileErrors(ref pth)  => cmd.args(&["--compile-errors", &format!("{}", pth.display())]),
         Dump                    => cmd.arg("--dump"),
         Explain                 => cmd.arg("--explain"),
         Graph                   => cmd.arg("--graph"),
@@ -96,6 +100,33 @@ pub fn process_file(file: &Path, args: &[MenhirOption]) {
     // Add --no-stdlib by default since we do not have a Rust sdlib yet.
     add_option(&mut command, &NoStdlib);
     add_option(&mut command, &Base(out_file));
+    assert!(command.status().unwrap().success());
+}
+
+/// Convenience function over `run` to compiles error files
+pub fn compile_errors(file: &Path, grammar: &Path, args: &[MenhirOption]) {
+    let out_file = match file.file_stem() {
+        Some(stem) => {
+            let mut pth = PathBuf::from(match ::std::env::var("OUT_DIR") {
+                Ok(dir) => dir,
+                Err(_) =>
+                    panic!("OUT_DIR is not set. menhir::process_file \
+                            should be called from a Cargo build script.")
+            });
+            pth.push(stem);
+            pth.set_extension("rs");
+            pth
+        }
+        None => panic!("invalid input file: {}", file.display())
+    };
+    let mut command = run(Some(&format!("{}", grammar.display())), args);
+    command.arg("--rust");
+    // Add --no-stdlib by default since we do not have a Rust sdlib yet.
+    add_option(&mut command, &NoStdlib);
+    add_option(&mut command, &CompileErrors(PathBuf::from(file)));
+    let errors = File::create(&format!("{}", out_file.display()))
+        .unwrap().into_raw_fd();
+    unsafe { command.stdout(Stdio::from_raw_fd(errors)); }
     assert!(command.status().unwrap().success());
 }
 
