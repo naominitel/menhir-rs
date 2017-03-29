@@ -387,11 +387,11 @@ let entry_points () =
 
 let items () =
     IExtCrate "menhir_runtime" ::
-    IUse ["self" ; "menhir_runtime" ; "Action"] ::
-    IUse ["self" ; "menhir_runtime" ; "SemAct"] ::
+    IUse ["self" ; "menhir_runtime" ; "internals" ; "Stack"] ::
+    IUse ["self" ; "menhir_runtime" ; "internals" ; "SemAct"] ::
+    IUse ["self" ; "menhir_runtime" ; "internals" ; "Action"] ::
     IUse ["self" ; "menhir_runtime" ; "LRParser"] ::
     IUse ["self" ; "menhir_runtime" ; "EntryPoint"] ::
-    IUse ["self" ; "menhir_runtime" ; "Stack"] ::
     parser_enums () @ parser_tables_items () @ parser_type () @
     semantic_actions () @ [into_impl ()] @ entry_points ()
 

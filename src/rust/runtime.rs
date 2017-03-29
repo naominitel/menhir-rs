@@ -52,156 +52,171 @@
 //! }
 //! ```
 
-// Internal representation.
+use self::internals::*;
+use self::lexing::*;
 
-pub type Stack<YYType, State> = Vec<(State, YYType)>;
+/// The internal representation of the LR engine.
+///
+/// Types and functions exposed in this module have to pe public because they
+/// are used from the generated code but should not be considered stable for the
+/// moment.
+pub mod internals {
+    pub type Stack<YYType, State> = Vec<(State, YYType)>;
 
-// The type of semantic actions.
-// Some(ptr) = a flat (not closure) code pointer to the handler
-// None = this is a start reduction. it's actually never executed but indicates
-// an Accept action instead. Since NULL is not a valid function pointer in correct
-// Rust code, this should be optimized to be just the size of a function pointer.
-pub type SemAct<YYType, State> = Option<fn(State, &mut Stack<YYType, State>) -> State>;
+    // The type of semantic actions.
+    // Some(ptr) = a flat (not closure) code pointer to the handler
+    // None = this is a start reduction. it's actually never executed but
+    // indicates an Accept action instead. Since NULL is not a valid function
+    // pointer in correct Rust code, this should be optimized to be just the size
+    // of a function pointer.
+    pub type SemAct<YYType, State> = Option<fn(State, &mut Stack<YYType, State>)
+                                               -> State>;
 
-// An action, i.e. an entry in the action table. Error, accept, reduce with a
-// semantic function that takes the stack, modifie it and returns the next state
-// or shift to state, discarding the current token.
-pub enum Action<YYType, State> {
-    Err,
-    Reduce(SemAct<YYType, State>),
-    Shift(State)
-}
+    // An action, i.e. an entry in the action table. Error, accept, reduce with a
+    // semantic function that takes the stack, modifie it and returns the next state
+    // or shift to state, discarding the current token.
+    pub enum Action<YYType, State> {
+        Err,
+        Reduce(SemAct<YYType, State>),
+        Shift(State)
+    }
 
-impl<T, U: Copy> Copy for Action<T, U> {}
+    impl<T, U: Copy> Copy for Action<T, U> {}
 
-impl<T, U: Clone> Clone for Action<T, U> {
-    fn clone(&self) -> Self {
-        match *self {
-            Action::Err => Action::Err,
-            Action::Reduce(act) => Action::Reduce(act),
-            Action::Shift(ref shift) => Action::Shift(shift.clone())
+    impl<T, U: Clone> Clone for Action<T, U> {
+        fn clone(&self) -> Self {
+            match *self {
+                Action::Err => Action::Err,
+                Action::Reduce(act) => Action::Reduce(act),
+                Action::Shift(ref shift) => Action::Shift(shift.clone())
+            }
         }
     }
 }
-
-// Lexer interface.
 
 /// The lexer interface.
-///
-/// This trait describes the interface that a Menhir parser expects from the
-/// lexer. It can be seen as an infinite iterator over tokens and locations,
-/// that can also report errors.
-///
-/// Several lexer generators or lexing tools expose a simpler interface based on
-/// the [`Iterator`] trait. They can be easily converted to this interface using
-/// [`IteratorLexer`].
-/// 
-/// [`Iterator`]: https://doc.rust-lang.org/stable/std/iter/trait.Iterator.html
-/// [`IteratorLexer`]: struct.IteratorLexer.html
-pub trait Lexer {
-    /// A type that describes the position of a token in the input source, for
-    /// example a line and column number.
+pub mod lexing {
+    /// The lexer interface.
     ///
-    /// The actual value of this type is left purely at the discretion of the
-    /// user. Menhir does not make any assumption on it and simply carries it
-    /// through the parsing process to report it when an error occurs. The user
-    /// can use any type appropriate for their error reporting mechanism, or
-    /// even `()` if tracking of locations is not desired.
-    type Location;
-
-    /// The type of tokens returned by this lexer.
-    type Token;
-
-    /// A type that describes the possible errors that the lexer might encounter
-    /// while processing the input source.
+    /// This trait describes the interface that a Menhir parser expects from the
+    /// lexer. It can be seen as an infinite iterator over tokens and locations,
+    /// that can also report errors.
     ///
-    /// As with `Location`, Menhir does not make any assumption on this type and
-    /// simply returns it unaltered when the lexer returns it. The user can use
-    /// any type appropriate for their error reporting mechanism, or even `()`
-    /// if this lexer cannot fail.
-    type Error;
-
-    /// Reads the next token from the input.
+    /// Several lexer generators or lexing tools expose a simpler interface based
+    /// on the [`Iterator`] trait. They can be easily converted to this interface
+    /// using [`IteratorLexer`].
+    /// 
+    /// [`Iterator`]: https://doc.rust-lang.org/stable/std/iter/trait.Iterator.html
+    /// [`IteratorLexer`]: struct.IteratorLexer.html
     ///
-    /// On success, returns a pair of the token and its location in the input
-    /// source. On failure, returns a value describing the error. Returning an
-    /// error from the lexer will cause a Menhir parser to stop the parsing
-    /// process and report it.
+    /// The stream of tokens
+    pub trait Lexer {
+        /// A type that describes the position of a token in the input source,
+        /// for example a line and column number.
+        ///
+        /// The actual value of this type is left purely at the discretion of the
+        /// user. Menhir does not make any assumption on it and simply carries it
+        /// through the parsing process to report it when an error occurs. The
+        /// user can use any type appropriate for their error reporting
+        /// mechanism, or even `()` if tracking of locations is not desired.
+        type Location;
+
+        /// The type of tokens returned by this lexer.
+        type Token;
+
+        /// A type that describes the possible errors that the lexer might
+        /// encounter while processing the input source.
+        ///
+        /// As with `Location`, Menhir does not make any assumption on this type
+        /// and simply returns it unaltered when the lexer returns it. The user
+        /// can use any type appropriate for their error reporting mechanism, or
+        /// even `()` if if this lexer cannot fail.
+        type Error;
+
+        /// Reads the next token from the input.
+        ///
+        /// On success, returns a pair of the token and its location in the input
+        /// source. On failure, returns a value describing the error. Returning
+        /// an error from the lexer will cause a Menhir parser to stop the
+        /// parsing process and report it.
+        ///
+        /// Menhir parsers are able to detect successful termination without
+        /// requiring extra lookahead. Because of this, no special value is
+        /// required to indicate the end of the stream. If the end of the stream
+        /// is encountered, `input` should report an error. This behaviour allows
+        /// the parser not to consume any token it does not need and leave the
+        /// lexer intact to be used for another parsing process. If one does want
+        /// the parser to use exactly the whole input, one should either
+        /// implement explicitly an “EOF” token in the grammar, or simply
+        /// manually check that the lexer has no more tokens to offer once
+        /// parsing succeeded.
+        fn input(&mut self) -> Result<(Self::Location, Self::Token), Self::Error>;
+    }
+
+    /// Adapter type to convert an iterator into a lexer.
     ///
-    /// Menhir parsers are able to detect successful termination without
-    /// requiring extra lookahead. Because of this, no special value is required
-    /// to indicate the end of the stream. If the end of the stream is
-    /// encountered, `input` should report an error. This behaviour allows the
-    /// parser not to consume any token it does not need and leave the lexer
-    /// intact to be used for another parsing process. If one does want the
-    /// parser to use exactly the whole input, one should either implement
-    /// explicitly an “EOF” token in the grammar, or simply manually check that
-    /// the lexer has no more tokens to offer once parsing succeeded.
-    fn input(&mut self) -> Result<(Self::Location, Self::Token), Self::Error>;
-}
+    /// Lexing tools that implement an interface based on [`Iterator`] can be
+    /// converted to Menhir's more advanced [`Lexer`] interface by using this
+    /// type.
+    ///
+    /// If the iterator returns `None` while the parser still needs tokens,
+    /// `input` will return an [`UnexpectedEof`] error. If one wants the parser
+    /// to consume exactly all the tokens, one should manually check that the
+    /// underlying iterator is empty once parsing succeeded.
+    ///
+    /// [`Iterator`]: https://doc.rust-lang.org/stable/std/iter/trait.Iterator.html
+    /// [`Lexer`]: trait.Lexer.html
+    /// [`UnexpectedEof`]: struct.UnexpectedEof.html
+    pub struct IteratorLexer<Iter, Loc, Tok>
+        where Iter: Iterator<Item = (Loc, Tok)> {
+        iter: Iter,
+        last_pos: Loc,
+        marker: ::std::marker::PhantomData<(Loc, Tok)>
+    }
 
-/// Adapter type to convert an iterator into a lexer.
-///
-/// Lexing tools that implement an interface based on [`Iterator`] can be
-/// converted to Menhir's more advanced [`Lexer`] interface by using this type.
-///
-/// If the iterator returns `None` while the parser still needs tokens, `input`
-/// will return an [`UnexpectedEof`] error. If one wants the parser to consume
-/// exactly all the tokens, one should manually check that the underlying
-/// iterator is empty once parsing succeeded.
-///
-/// [`Iterator`]: https://doc.rust-lang.org/stable/std/iter/trait.Iterator.html
-/// [`Lexer`]: trait.Lexer.html
-/// [`UnexpectedEof`]: struct.UnexpectedEof.html
-pub struct IteratorLexer<Iter, Loc, Tok>
-    where Iter: Iterator<Item = (Loc, Tok)> {
-    iter: Iter,
-    last_pos: Loc,
-    marker: ::std::marker::PhantomData<(Loc, Tok)>
-}
+    /// This error indicates that the lexer reached the end of the input stream
+    /// while the parser was still expecting input.
+    ///
+    /// It is used when using an [`IteratorLexer`] as input, if the underlying
+    /// iterator returns `None`. It can also be used to report the end of the
+    /// stream when implementing a custom [`Lexer`].
+    ///
+    /// [`IteratorLexer`]: struct.IteratorLexer.html
+    /// [`Lexer`]: trait.Lexer.html
+    #[derive(Clone, Copy, Debug)]
+    pub struct UnexpectedEof<Location>(pub Location);
 
-/// This error indicates that the lexer reached the end of the input stream
-/// while the parser was still expecting input.
-///
-/// It is used when using an [`IteratorLexer`] as input, if the underlying
-/// iterator returns `None`. It can also be used to report the end of the stream
-/// when implementing a custom [`Lexer`].
-///
-/// [`IteratorLexer`]: struct.IteratorLexer.html
-/// [`Lexer`]: trait.Lexer.html
-#[derive(Clone, Copy, Debug)]
-pub struct UnexpectedEof<Location>(pub Location);
+    impl<Iter, Loc, Tok> Lexer for IteratorLexer<Iter, Loc, Tok>
+        where Loc: Clone, Iter: Iterator<Item = (Loc, Tok)> {
+        type Location = Loc;
+        type Token = Tok;
+        type Error = UnexpectedEof<Self::Location>;
 
-impl<Iter, Loc, Tok> Lexer for IteratorLexer<Iter, Loc, Tok>
-    where Loc: Clone, Iter: Iterator<Item = (Loc, Tok)> {
-    type Location = Loc;
-    type Token = Tok;
-    type Error = UnexpectedEof<Self::Location>;
-
-    fn input(&mut self) -> Result<(Loc, Tok), Self::Error> {
-        match self.iter.next() {
-            Some((pos, tok)) => {
-                self.last_pos = pos.clone();
-                Ok((pos, tok))
+        fn input(&mut self) -> Result<(Loc, Tok), Self::Error> {
+            match self.iter.next() {
+                Some((pos, tok)) => {
+                    self.last_pos = pos.clone();
+                    Ok((pos, tok))
+                }
+                None => Err(UnexpectedEof(self.last_pos.clone()))
             }
-            None => Err(UnexpectedEof(self.last_pos.clone()))
         }
     }
-}
 
-impl<Iter, Loc, Tok> IteratorLexer<Iter, Loc, Tok>
-    where Loc: Default, Iter: Iterator<Item = (Loc, Tok)> {
-    /// Builds a new adapter from the given iterator.
-    ///
-    /// This function takes the iterator by-value. If the iterator is not,
-    /// `Copy`, it won't be usable anymore after the parsing process. If this
-    /// is not desired, one should give to this function a mutable reference to
-    /// the iterator instead.
-    pub fn new(lex: Iter) -> Self {
-        IteratorLexer {
-            iter: lex,
-            last_pos: Loc::default(),
-            marker: ::std::marker::PhantomData
+    impl<Iter, Loc, Tok> IteratorLexer<Iter, Loc, Tok>
+        where Loc: Default, Iter: Iterator<Item = (Loc, Tok)> {
+        /// Builds a new adapter from the given iterator.
+        ///
+        /// This function takes the iterator by-value. If the iterator is not,
+        /// `Copy`, it won't be usable anymore after the parsing process. If this
+        /// is not desired, one should give to this function a mutable reference
+        /// to the iterator instead.
+        pub fn new(lex: Iter) -> Self {
+            IteratorLexer {
+                iter: lex,
+                last_pos: Loc::default(),
+                marker: ::std::marker::PhantomData
+            }
         }
     }
 }
@@ -288,11 +303,11 @@ pub trait EntryPoint<Parser: LRParser> {
     ///   value.
     /// * The parser encountered an unrecoverable error, such as a lexer error
     ///   or a syntax error which it failed to recover from, in which case it
-    ///   will return `Err(e)`. See [`ParserError`] for more details.
+    ///   will return `Err(e)`. See [`Error`] for more details.
     ///
     /// [manual]: http://gallium.inria.fr/~fpottier/menhir/manual.pdf
-    /// [`ParserError`]: enum.ParserError.html
-    fn run<Lexer>(lex: Lexer) -> Result<Self::Output, ParserError<Lexer, Parser>>
+    /// [`Error`]: enum.Error.html
+    fn run<Lexer>(lex: Lexer) -> Result<Self::Output, Error<Lexer, Parser>>
         where Lexer: self::Lexer,
               Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
               Lexer::Location: Clone,
@@ -306,7 +321,7 @@ pub trait EntryPoint<Parser: LRParser> {
 ///
 /// This is the type returned by a Menhir parser upon encountering an error it
 /// cannot or failed to recover from.
-pub enum ParserError<Lexer: self::Lexer, Parser: LRParser> {
+pub enum Error<Lexer: self::Lexer, Parser: LRParser> {
     /// The parser encountered a syntax error that couldn't be recovered.
     /// See [`SyntaxError`].
     ///
@@ -317,7 +332,7 @@ pub enum ParserError<Lexer: self::Lexer, Parser: LRParser> {
     /// error or the end of the stream. The carried value depends on the actual
     /// instance of [`Lexer`] being used.
     ///
-    /// [`Lexer`]: trait.Lexer.html
+    /// [`Lexer`]: lexing/trait.Lexer.html
     LexerError(Lexer::Error)
 }
 
@@ -368,7 +383,7 @@ impl<Parser: LRParser, Lexer: self::Lexer> SyntaxError<Lexer, Parser> {
     /// The actual type of this value depends on the instance of [`Lexer`] being
     /// used.
     ///
-    /// [`Lexer`]: trait.Lexer.html
+    /// [`Lexer`]: lexing/trait.Lexer.html
     pub fn location(&self) -> &Lexer::Location {
         &self.loc
     }
@@ -413,7 +428,7 @@ impl<Lexer, Parser, Entry> ParserState<Lexer, Parser, Entry>
           Entry: EntryPoint<Parser> {
     fn step(self) -> ParseResult<Entry::Output,
                                      ErrorState<Lexer, Parser, Entry>,
-                                     ParserError<Lexer, Parser>> {
+                                     Error<Lexer, Parser>> {
         let ParserState {
             mut state, mut yylval, mut stack,
             mut lookahead, mut location, mut lexer,
@@ -437,7 +452,7 @@ impl<Lexer, Parser, Entry> ParserState<Lexer, Parser, Entry>
                     let (pos, (nval, tok)) = match lexer.input() {
                         Ok((pos, tok)) => (pos, tok.into()),
                         Err(err) =>
-                            return ParseResult::Fatal(ParserError::LexerError(err))
+                            return ParseResult::Fatal(Error::LexerError(err))
                     };
                     lookahead = tok;
                     location = pos;
@@ -479,7 +494,7 @@ impl<Lexer, Parser, Entry> ParserState<Lexer, Parser, Entry>
           Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
           Lexer::Location: Clone,
           Entry: EntryPoint<Parser> {
-    fn run(mut self) -> Result<Entry::Output, ParserError<Lexer, Parser>> {
+    fn run(mut self) -> Result<Entry::Output, Error<Lexer, Parser>> {
         loop {
             match self.step() {
                 ParseResult::Success(out) => return Ok(out),
@@ -496,7 +511,7 @@ impl<Lexer, Parser, Entry> ParserState<Lexer, Parser, Entry>
                             }
 
                             ParseResult::Fatal(()) =>
-                                return Err(ParserError::SyntaxError(
+                                return Err(Error::SyntaxError(
                                     SyntaxError { loc: loc, state: state }
                                 )),
 
@@ -577,7 +592,7 @@ fn new<Lexer, Parser, Entry>(mut lex: Lexer)
 // Implements the monolithic interface in terms of the incremental interface.
 // Creates a new parser and run it, with the default error handling strategy.
 fn run<Lexer, Parser, Entry>(lex: Lexer) -> Result<Entry::Output,
-                                                   ParserError<Lexer, Parser>>
+                                                   Error<Lexer, Parser>>
     where Lexer: self::Lexer,
           Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
           Lexer::Location: Clone,
@@ -585,7 +600,7 @@ fn run<Lexer, Parser, Entry>(lex: Lexer) -> Result<Entry::Output,
           Entry: EntryPoint<Parser> {
     let state = match new::<_, _, Entry>(lex) {
         Ok(state) => state,
-        Err(err) => return Err(ParserError::LexerError(err))
+        Err(err) => return Err(Error::LexerError(err))
     };
     state.run()
 }
