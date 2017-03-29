@@ -292,10 +292,11 @@ pub trait EntryPoint<Parser: LRParser> {
     ///
     /// [manual]: http://gallium.inria.fr/~fpottier/menhir/manual.pdf
     /// [`ParserError`]: enum.ParserError.html
-    fn run<Lexer>(lex: Lexer) -> Result<Self::Output, ParserError<Lexer>>
+    fn run<Lexer>(lex: Lexer) -> Result<Self::Output, ParserError<Lexer, Parser>>
         where Lexer: self::Lexer,
               Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
               Lexer::Location: Clone,
+              Parser: LRParser,
               Self: ::std::marker::Sized {
         run::<Lexer, Parser, Self>(lex)
     }
@@ -305,15 +306,12 @@ pub trait EntryPoint<Parser: LRParser> {
 ///
 /// This is the type returned by a Menhir parser upon encountering an error it
 /// cannot or failed to recover from.
-#[derive(Debug)]
-pub enum ParserError<Lexer: self::Lexer> {
+pub enum ParserError<Lexer: self::Lexer, Parser: LRParser> {
     /// The parser encountered a syntax error that couldn't be recovered.
-    /// 
-    /// Contains the position in the input stream and a detailed error message
-    /// such as returned by [`LRErrors::message`].
+    /// See [`SyntaxError`].
     ///
-    /// [`LRErrors::message`]: trait.LRErrors.html#method.message
-    SyntaxError(Lexer::Location, Option<&'static str>),
+    /// [`SyntaxError`]: struct.SyntaxError.html
+    SyntaxError(SyntaxError<Lexer, Parser>),
 
     /// The lexer returned an error when asked for a token, typically an IO
     /// error or the end of the stream. The carried value depends on the actual
@@ -321,6 +319,59 @@ pub enum ParserError<Lexer: self::Lexer> {
     ///
     /// [`Lexer`]: trait.Lexer.html
     LexerError(Lexer::Error)
+}
+
+/// An unrecoverable syntax error.
+///
+/// Allows to extract the position in the input stream and the automaton state
+/// in which the error was detected.
+pub struct SyntaxError<Lexer: self::Lexer, Parser: LRParser> {
+    loc: Lexer::Location,
+    state: Parser::State
+}
+
+/// Extension trait for parser that can provide detailed error messages.
+///
+/// Menhir will generate an implementation of this trait for the parser type if
+/// the grammar file was compiled with the `--compile-errors` option. See the
+/// [manual] for information about how to use this feature.
+///
+/// [manual]: http://gallium.inria.fr/~fpottier/menhir/manual.pdf
+pub trait LRErrors: LRParser {
+    /// Gives a proper error message to describe the situation in which the
+    /// parser entered error-handling mode.
+    ///
+    /// Returns the message provided by the user for this state in the error
+    /// file given to the `--compiler-errors` option.
+    fn message(state: Self::State) -> Option<&'static str>;
+}
+
+impl<Parser: LRErrors, Lexer: self::Lexer> SyntaxError<Lexer, Parser> {
+    /// Returns a propre error message to describe this error, if such a
+    /// message was specified.
+    ///
+    /// This require the parser to implement [`LRErrors`], which is the case
+    /// when the grammar is compiled with the `--compile-error` option. See the
+    /// [manual] for information about how to use this feature.
+    ///
+    /// [`LRErrors`]: trait.LRErrors.html
+    /// [manual]: http://gallium.inria.fr/~fpottier/menhir/manual.pdf
+    pub fn as_str(&self) -> Option<&'static str> {
+        Parser::message(self.state)
+    }
+}
+
+impl<Parser: LRParser, Lexer: self::Lexer> SyntaxError<Lexer, Parser> {
+    /// Returns the location in the input stream of the token where the error
+    /// was detected.
+    ///
+    /// The actual type of this value depends on the instance of [`Lexer`] being
+    /// used.
+    ///
+    /// [`Lexer`]: trait.Lexer.html
+    pub fn location(&self) -> &Lexer::Location {
+        &self.loc
+    }
 }
 
 // Incremental interface.
@@ -362,7 +413,7 @@ impl<Lexer, Parser, Entry> ParserState<Lexer, Parser, Entry>
           Entry: EntryPoint<Parser> {
     fn step(self) -> ParseResult<Entry::Output,
                                      ErrorState<Lexer, Parser, Entry>,
-                                     ParserError<Lexer>> {
+                                     ParserError<Lexer, Parser>> {
         let ParserState {
             mut state, mut yylval, mut stack,
             mut lookahead, mut location, mut lexer,
@@ -423,18 +474,19 @@ impl<Lexer, Parser, Entry> ParserState<Lexer, Parser, Entry>
 // Implements the monolithic interface in terms of the incremental interface,
 // with the default error handling strategy.
 impl<Lexer, Parser, Entry> ParserState<Lexer, Parser, Entry>
-    where Parser: LRParser + LRErrors,
+    where Parser: LRParser,
           Lexer: self::Lexer,
           Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
           Lexer::Location: Clone,
           Entry: EntryPoint<Parser> {
-    fn run(mut self) -> Result<Entry::Output, ParserError<Lexer>> {
+    fn run(mut self) -> Result<Entry::Output, ParserError<Lexer, Parser>> {
         loop {
             match self.step() {
                 ParseResult::Success(out) => return Ok(out),
 
                 ParseResult::Error(mut err_state) => {
-                    let (last_pos, last_err) = err_state.report_error();
+                    let loc = err_state.state.location.clone();
+                    let state = err_state.state.state;
 
                     loop {
                         match err_state.try_recover() {
@@ -445,7 +497,7 @@ impl<Lexer, Parser, Entry> ParserState<Lexer, Parser, Entry>
 
                             ParseResult::Fatal(()) =>
                                 return Err(ParserError::SyntaxError(
-                                    last_pos, last_err
+                                    SyntaxError { loc: loc, state: state }
                                 )),
 
                             ParseResult::Error(new_err_state) =>
@@ -462,22 +514,6 @@ impl<Lexer, Parser, Entry> ParserState<Lexer, Parser, Entry>
 
 // Incremental interface: error handling.
 
-/// Extension trait for parsers that can provide detailed error messages.
-///
-/// Menhir will generate an implementation of this trait for the parser type if
-/// the grammar file was compiled with the `--compile-errors` option. See the
-/// [manual] for information about how to use this feature.
-///
-/// [manual]: http://gallium.inria.fr/~fpottier/menhir/manual.pdf
-pub trait LRErrors: LRParser {
-    /// Gives a proper error message to describe the situation in which the
-    /// parser entered error-handling mode.
-    ///
-    /// Returns the message provided by the user for this state in the error
-    /// file given to the `--compiler-errors` option.
-    fn message(state: Self::State) -> Option<&'static str>;
-}
-
 // The state of the parser after a recoverable error.
 struct ErrorState<Lexer, Parser, Entry>
     where Parser: LRParser,
@@ -493,16 +529,10 @@ type RecoveryResult<Lexer, Parser, Entry> =
                 ()>;
 
 impl<Parser, Lexer, Entry> ErrorState<Lexer, Parser, Entry>
-    where Parser: LRParser + LRErrors,
+    where Parser: LRParser,
           Lexer: self::Lexer,
           Lexer::Location: Clone,
           Entry: EntryPoint<Parser> {
-    // Give a proper error message to describe the situation in which the
-    // parser entered error-handling mode.
-    fn report_error(&self) -> (Lexer::Location, Option<&'static str>) {
-        (self.state.location.clone(), Parser::message(self.state.state))
-    }
-
     fn try_recover(mut self) -> RecoveryResult<Lexer, Parser, Entry> {
         if let Action::Err = Parser::action(self.state.state, Parser::error()) {
             return match self.state.stack.pop() {
@@ -547,11 +577,11 @@ fn new<Lexer, Parser, Entry>(mut lex: Lexer)
 // Implements the monolithic interface in terms of the incremental interface.
 // Creates a new parser and run it, with the default error handling strategy.
 fn run<Lexer, Parser, Entry>(lex: Lexer) -> Result<Entry::Output,
-                                                   ParserError<Lexer>>
+                                                   ParserError<Lexer, Parser>>
     where Lexer: self::Lexer,
           Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
           Lexer::Location: Clone,
-          Parser: LRParser + LRErrors,
+          Parser: LRParser,
           Entry: EntryPoint<Parser> {
     let state = match new::<_, _, Entry>(lex) {
         Ok(state) => state,

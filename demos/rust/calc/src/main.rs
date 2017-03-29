@@ -21,20 +21,27 @@ fn main() {
     ].into_iter();
     match run!(&mut input) {
         Ok(res) => println!("res = {:?}", res),
-        Err(ParserError::SyntaxError(pos, msg)) =>
-            panic!("syntax error at {}: {}", pos, msg.unwrap_or("")),
+        Err(ParserError::SyntaxError(err)) =>
+            panic!("syntax error at {}: {}",
+                   err.location(),
+                   err.as_str().unwrap_or("")),
         Err(ParserError::LexerError(err)) => panic!("lexer error: {:?}", err)
     }
     assert!(if let None = input.next() { true } else { false });
 
     let input = vec![TIMES];
-    assert!(if let Err(ParserError::SyntaxError
-                       (0, Some("Unexpected token. Expected an expression.\n"))) =
-            run!(&mut input.into_iter()) { true } else { false });
+    assert!(match run!(&mut input.into_iter()) {
+        Err(ParserError::SyntaxError(err)) =>
+            err.location() == &0 &&
+            err.as_str() == Some("Unexpected token. Expected an expression.\n"),
+        _ => false
+    });
 
     let input: Vec<parser::Token> = vec![];
-    assert!(if let Err(ParserError::LexerError(UnexpectedEof(0))) =
-            run!(&mut input.into_iter()) { true } else { false });
+    assert!(match run!(&mut input.into_iter()) {
+        Err(ParserError::LexerError(UnexpectedEof(0))) => true,
+        _ => false
+    });
 }
 
 #[test]
