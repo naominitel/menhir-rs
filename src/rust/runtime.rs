@@ -69,15 +69,15 @@ pub mod internals {
     // indicates an Accept action instead. Since NULL is not a valid function
     // pointer in correct Rust code, this should be optimized to be just the size
     // of a function pointer.
-    pub type SemAct<YYType, State> = Option<fn(State, &mut Stack<YYType, State>)
-                                               -> State>;
+    pub type SemAct<YYType, State> = fn(State, &mut Stack<YYType, State>)
+                                        -> State;
 
     // An action, i.e. an entry in the action table. Error, accept, reduce with a
     // semantic function that takes the stack, modifie it and returns the next state
     // or shift to state, discarding the current token.
     pub enum Action<YYType, State> {
         Err,
-        Reduce(SemAct<YYType, State>),
+        Reduce(Option<SemAct<YYType, State>>),
         Shift(State)
     }
 
@@ -242,7 +242,7 @@ pub trait LRParser {
     type YYType;
 
     fn default_reduction(state: Self::State)
-                         -> Option<SemAct<Self::YYType, Self::State>>;
+                         -> Option<Option<SemAct<Self::YYType, Self::State>>>;
     fn action(state: Self::State, token: Self::Terminal)
               -> Action<Self::YYType, Self::State>;
 }
@@ -275,12 +275,12 @@ pub trait EntryPoint<Parser: LRParser> {
     /// [`ParserState`] should not be considered stable for the moment.
     ///
     /// [`ParserState`]: struct.ParserState.html
-    fn new<Lexer>(lex: Lexer)
-                  -> Result<ParserState<Lexer, Parser, Self>, Lexer::Error>
+    fn new<Lexer>() -> ParserState<Lexer, Parser, Self>
         where Lexer: self::Lexer,
+              Lexer::Location: Clone,
               Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
               Self: ::std::marker::Sized {
-        new::<Lexer, Parser, Self>(lex)
+        ParserState::<Lexer, Parser, Self>::new()
     }
 
     /// Runs the parsing process for this entry point from the given lexer.
@@ -313,7 +313,8 @@ pub trait EntryPoint<Parser: LRParser> {
               Lexer::Location: Clone,
               Parser: LRParser,
               Self: ::std::marker::Sized {
-        run::<Lexer, Parser, Self>(lex)
+        let state = Self::new();
+        state.run(lex)
     }
 }
 
@@ -391,15 +392,6 @@ impl<Parser: LRParser, Lexer: self::Lexer> SyntaxError<Lexer, Parser> {
 
 // Incremental interface.
 
-/// The result of various parsing operations.
-/// 
-/// This type should not be considered stable.
-enum ParseResult<Output, Error, Fatal> {
-    Success(Output),
-    Error(Error),
-    Fatal(Fatal)
-}
-
 /// The state of the parser during the parsing process.
 ///
 /// The interface of this type should not be considered stable.
@@ -412,77 +404,193 @@ pub struct ParserState<Lexer, Parser, Entry>
           Entry: EntryPoint<Parser> {
     state: Parser::State,
     yylval: Parser::YYType,
-    stack: Stack<Parser::YYType, Parser::State>,
     lookahead: Parser::Terminal,
     location: Lexer::Location,
-    lexer: Lexer,
-    entry: ::std::marker::PhantomData<Entry>
+    stack: Stack<Parser::YYType, Parser::State>,
+    entry: ::std::marker::PhantomData<Entry>,
+    error: Option<(Parser::State, Lexer::Location)>
 }
 
-// Runs a single step of the parsing process.
-// Contains the actual logic of the LR loop.
+enum Checkpoint<Lexer, Parser, Entry>
+    where Parser: LRParser,
+          Lexer: self::Lexer,
+          Entry: EntryPoint<Parser> {
+    InputNeeded(ParserState<Lexer, Parser, Entry>),
+    Reducing(ParserState<Lexer, Parser, Entry>,
+             SemAct<Parser::YYType, Parser::State>,
+             bool),
+    Shifting(ParserState<Lexer, Parser, Entry>, Parser::State),
+    HandlingError(ParserState<Lexer, Parser, Entry>),
+    Accepted(Entry::Output),
+    Rejected(SyntaxError<Lexer, Parser>)
+}
+
+// Several functions that each run a single step of the parsing process.
+// They contain the actual logic of the LR loop.
+// This interface is unsafe for now because some functions will leave the parser
+// in an invalid state and cause undefined behaviour if they are not called in
+// the right order.
+// For this reason, they are not exposed but only used to implement the standard
+// monolithic interface.
+// We will make the incremental interface public once we add some kind of
+// (preferably static) safety checks to those functions.
 impl<Lexer, Parser, Entry> ParserState<Lexer, Parser, Entry>
     where Parser: LRParser,
           Lexer: self::Lexer,
-          Lexer:: Token: Into<(Parser::YYType, Parser::Terminal)>,
+          Lexer::Location: Clone,
+          Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
           Entry: EntryPoint<Parser> {
-    fn step(self) -> ParseResult<Entry::Output,
-                                     ErrorState<Lexer, Parser, Entry>,
-                                     Error<Lexer, Parser>> {
-        let ParserState {
-            mut state, mut yylval, mut stack,
-            mut lookahead, mut location, mut lexer,
-            entry: _
-        } = self;
 
-        'a: loop {
-            match Parser::action(state, lookahead) {
-                Action::Shift(shift) => {
-                    stack.push((state, yylval));
-                    state = shift;
+    fn new() -> ParserState<Lexer, Parser, Entry> {
+        use std::mem::uninitialized;
+        unsafe { ParserState {
+            state: Entry::initial(),
+            stack: Vec::new(),
+            yylval: uninitialized(),
+            lookahead: uninitialized(),
+            location: uninitialized(),
+            entry: ::std::marker::PhantomData,
+            error: None
+        }}
+    }
 
-                    while let Some(red) = Parser::default_reduction(state) {
-                        match red {
-                            Some(code) => state = code(state, &mut stack),
-                            None => break 'a
-                        }
-                    }
+    // Start the parsing process: we need lookahead. Stop and ask for input.
+    fn start(self) -> Checkpoint<Lexer, Parser, Entry> {
+        self.check_default_reductions(true)
+    }
 
-                    // discard
-                    let (pos, (nval, tok)) = match lexer.input() {
-                        Ok((pos, tok)) => (pos, tok.into()),
-                        Err(err) =>
-                            return ParseResult::Fatal(Error::LexerError(err))
-                    };
-                    lookahead = tok;
-                    location = pos;
-                    yylval = nval;
-                }
+    // Called by the user to provide us input.
+    fn offer(self, (loc, tok): (Lexer::Location, Lexer::Token))
+             -> Checkpoint<Lexer, Parser, Entry> {
+        self.discard(loc, tok)
+    }
 
-                Action::Reduce(Some(reduce)) => {
-                    state = reduce(state, &mut stack);
-                    while let Some(red) = Parser::default_reduction(state) {
-                        match red {
-                            Some(code) => state = code(state, &mut stack),
-                            None => break 'a
-                        }
-                    }
-                }
+    // We have new input, discard the current lookahead token.
+    fn discard(mut self, loc: Lexer::Location, tok: Lexer::Token)
+               -> Checkpoint<Lexer, Parser, Entry> {
+        let (yylval, tok) = tok.into();
+        // Here yylval cannot contain a valid object, don't call dtor.
+        unsafe {
+            let val = ::std::mem::replace(&mut self.yylval, yylval);
+            ::std::mem::forget(val);
+        }
+        self.lookahead = tok;
+        self.location = loc;
+        self.error = None;
+        self.check_error()
+    }
 
-                Action::Reduce(None) => break,
-                Action::Err => {
-                    return ParseResult::Error(ErrorState {
-                        state: ParserState {
-                            state: state, yylval: yylval, stack: stack,
-                            lookahead: lookahead, location: location, lexer: lexer,
-                            entry: ::std::marker::PhantomData
-                        }
-                    });
+    // Before performing any action, check if there are default reductions.
+    fn check_default_reductions(self, discard: bool)
+                                -> Checkpoint<Lexer, Parser, Entry> {
+        if let Some(red) = Parser::default_reduction(self.state) {
+            self.announce_reduce(red, discard)
+        } else if discard {
+            Checkpoint::InputNeeded(self)
+        } else {
+            self.check_error()
+        }
+    }
+
+    // If self error is not None, then we are currently in the process of
+    // handling an error (i.e. the current lookahead token is the error token).
+    // If this is the case, stop and expose an error handling checkpoint to the
+    // user to ask them what to do.
+    // Otherwise, perform an action.
+    fn check_error(self) -> Checkpoint<Lexer, Parser, Entry> {
+        if let Some(_) = self.error {
+            Checkpoint::HandlingError(self)
+        } else {
+            // action
+            match Parser::action(self.state, self.lookahead) {
+                Action::Shift(shift) => self.shift(shift),
+                Action::Reduce(reduce) => self.announce_reduce(reduce, false),
+                Action::Err => self.initiate_error()
+            }
+        }
+    }
+
+    // We have a shift action. Perform it, push the current semantic value, and
+    // expose it to the user. After that checkpoint, we should go back to start()
+    // to get new input.
+    fn shift(mut self, shift: Parser::State)
+             -> Checkpoint<Lexer, Parser, Entry> {
+        self.stack.push((self.state, self.yylval));
+        // Here yylval has been moved so this is ok.
+        self.yylval = unsafe { ::std::mem::uninitialized() };
+        self.state = shift;
+        Checkpoint::Shifting(self, shift)
+    }
+
+    // We have a reduce action. If this was the start production, accept the
+    // input. Otherwise, expose a reduction checkpoint to the user.
+    fn announce_reduce(self, red: Option<SemAct<Parser::YYType, Parser::State>>,
+                       discard: bool) -> Checkpoint<Lexer, Parser, Entry> {
+        match red {
+            Some(code) => Checkpoint::Reducing(self, code, discard),
+            None => self.accept()
+        }
+    }
+
+    // Callend by the user to perform the reduction checkpoint.
+    // Call the semantic action and go back directly to checking for default
+    // reductions, since the current state changed but not the lookahead token.
+    fn reduce(mut self, code: SemAct<Parser::YYType, Parser::State>,
+              discard: bool) -> Checkpoint<Lexer, Parser, Entry> {
+        self.state = code(self.state, &mut self.stack);
+        self.check_default_reductions(discard)
+    }
+
+    // Accept the input and return the final semantic value.
+    fn accept(self) -> Checkpoint<Lexer, Parser, Entry> {
+        Checkpoint::Accepted(Entry::extract_output(self.stack))
+    }
+
+    // We do not have any action, so the current token is errorneous.
+    // Begin error handling mode, remember the current state and position to
+    // generate an error message later.
+    // Then stop and expose the current situation to the user.
+    fn initiate_error(mut self) -> Checkpoint<Lexer, Parser, Entry> {
+        self.error = Some((self.state, self.location.clone()));
+        Checkpoint::HandlingError(self)
+    }
+
+    // Called by the user to perform a step of error handling.
+    // This is actually an action table lookup with the error token.
+    fn error_step(self) -> Checkpoint<Lexer, Parser, Entry> {
+        match Parser::action(self.state, Parser::error()) {
+            // we have a shift on the error terminal
+            Action::Shift(shift) => self.shift(shift),
+            // not sure it's even possible to have an accepting reduction
+            // on error but let's leave it at least for type safety...
+            Action::Reduce(None) => self.accept(),
+            // don't expose reduction steps taken during error handling
+            Action::Reduce(Some(reduce)) => self.reduce(reduce, false),
+            Action::Err => self.error_continue()
+        }
+    }
+
+    // No action possible on the error token in this state, unwind a stack cell
+    // and expose to the user that we are still in error handling mode.
+    fn error_continue(mut self) -> Checkpoint<Lexer, Parser, Entry> {
+        return match self.stack.pop() {
+            Some((state, _)) => {
+                self.state = state;
+                Checkpoint::HandlingError(self)
+            }
+
+            None => {
+                // No more stack cells, abort.
+                match self.error {
+                    Some((state, loc)) =>
+                        Checkpoint::Rejected(SyntaxError {
+                            state: state,
+                            loc: loc
+                        }),
+                    None => unreachable!()
                 }
             }
         }
-
-        ParseResult::Success(Entry::extract_output(stack))
     }
 }
 
@@ -494,113 +602,32 @@ impl<Lexer, Parser, Entry> ParserState<Lexer, Parser, Entry>
           Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
           Lexer::Location: Clone,
           Entry: EntryPoint<Parser> {
-    fn run(mut self) -> Result<Entry::Output, Error<Lexer, Parser>> {
+    /// Run the parsing process until success or failure.
+    ///
+    /// This function actually implements the [`EntryPoint::run`] function in
+    /// terms of the internal, unstable incremental interface. See
+    /// [`EntryPoint::run`] for more details about the behaviour of this
+    /// function.
+    ///
+    /// [`EntryPoint::run`]: trait.EntryPoint.html
+    pub fn run(self, mut lexer: Lexer)
+               -> Result<Entry::Output, Error<Lexer, Parser>> {
+        let mut checkpoint = self.start();
         loop {
-            match self.step() {
-                ParseResult::Success(out) => return Ok(out),
-
-                ParseResult::Error(mut err_state) => {
-                    let loc = err_state.state.location.clone();
-                    let state = err_state.state.state;
-
-                    loop {
-                        match err_state.try_recover() {
-                            ParseResult::Success(ok_state) => {
-                                self = ok_state;
-                                break;
-                            }
-
-                            ParseResult::Fatal(()) =>
-                                return Err(Error::SyntaxError(
-                                    SyntaxError { loc: loc, state: state }
-                                )),
-
-                            ParseResult::Error(new_err_state) =>
-                                err_state = new_err_state
-                        }
+            checkpoint = match checkpoint {
+                Checkpoint::Rejected(err)        =>
+                    return Err(Error::SyntaxError(err)),
+                Checkpoint::Accepted(out)        => return Ok(out),
+                Checkpoint::HandlingError(state) => state.error_step(),
+                Checkpoint::Shifting(state, _)   => state.start(),
+                Checkpoint::Reducing(state, act, discard) => state.reduce(act, discard),
+                Checkpoint::InputNeeded(state)   => {
+                    match lexer.input() {
+                        Ok(input) => state.offer(input),
+                        Err(err) => return Err(Error::LexerError(err))
                     }
                 }
-
-                ParseResult::Fatal(err) => return Err(err)
             }
         }
     }
-}
-
-// Incremental interface: error handling.
-
-// The state of the parser after a recoverable error.
-struct ErrorState<Lexer, Parser, Entry>
-    where Parser: LRParser,
-          Lexer: self::Lexer,
-          Entry: EntryPoint<Parser> {
-    state: ParserState<Lexer, Parser, Entry>
-}
-
-// The result of an error recovery operation.
-type RecoveryResult<Lexer, Parser, Entry> =
-    ParseResult<ParserState<Lexer, Parser, Entry>,
-                ErrorState<Lexer, Parser, Entry>,
-                ()>;
-
-impl<Parser, Lexer, Entry> ErrorState<Lexer, Parser, Entry>
-    where Parser: LRParser,
-          Lexer: self::Lexer,
-          Lexer::Location: Clone,
-          Entry: EntryPoint<Parser> {
-    fn try_recover(mut self) -> RecoveryResult<Lexer, Parser, Entry> {
-        if let Action::Err = Parser::action(self.state.state, Parser::error()) {
-            return match self.state.stack.pop() {
-                Some((state, _)) => {
-                    self.state.state = state;
-                    ParseResult::Error(self)
-                }
-
-                None => ParseResult::Fatal(())
-            }
-        }
-
-        ParseResult::Success(ParserState {
-            lookahead: Parser::error(),
-            .. self.state
-        })
-    }
-}
-
-// Convenience functions for implementing LRParser::new() and LRParser::run().
-
-// Creates a new parser from the given lexer.
-// FIXME: Should not consume any input.
-fn new<Lexer, Parser, Entry>(mut lex: Lexer)
-                                 -> Result<ParserState<Lexer, Parser, Entry>,
-                                           Lexer::Error>
-    where Lexer: self::Lexer,
-          Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
-          Parser: LRParser,
-          Entry: EntryPoint<Parser> {
-    let state = Entry::initial();
-    let stack = Vec::new();
-    let (pos, tok) = try!(lex.input());
-    let (yylval, tok) = tok.into();
-    Ok(ParserState {
-        state: state, stack: stack, yylval: yylval,
-        lookahead: tok, location: pos, lexer: lex,
-        entry: ::std::marker::PhantomData
-    })
-}
-
-// Implements the monolithic interface in terms of the incremental interface.
-// Creates a new parser and run it, with the default error handling strategy.
-fn run<Lexer, Parser, Entry>(lex: Lexer) -> Result<Entry::Output,
-                                                   Error<Lexer, Parser>>
-    where Lexer: self::Lexer,
-          Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
-          Lexer::Location: Clone,
-          Parser: LRParser,
-          Entry: EntryPoint<Parser> {
-    let state = match new::<_, _, Entry>(lex) {
-        Ok(state) => state,
-        Err(err) => return Err(Error::LexerError(err))
-    };
-    state.run()
 }

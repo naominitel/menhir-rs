@@ -160,8 +160,9 @@ let encode_compressed name (disp, table) ty encode_elem =
     [encode_table disp_name disp TIsize (fun i -> EInt i) ;
      encode_table table_name table ty encode_elem]
 
-(* The type of default reductions entries: Option<SemAct<YYType>>. *)
-let defred_ty = (TApp ("Option", [TApp ("SemAct", [TVar "YYType" ; TUsize])]))
+(* The type of default reductions entries: Option<Option<SemAct<YYType>>>. *)
+let defred_ty =
+    (TApp ("Option", [TApp ("Option", [TApp ("SemAct", [TVar "YYType" ; TUsize])])]))
 
 let parser_tables_items () =
     let (act_table, goto_table, error_table, default_table) = parser_tables () in
