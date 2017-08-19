@@ -193,7 +193,7 @@ let compressed_index table idx1 idx2 =
                  TUsize))
 
 let parser_type () =
-    let struct_ = INewtype (false, "Parser", []) in
+    let struct_ = INewtype (true, "Parser", []) in
     let impl = IImpl (TVar "Parser", [
         (* The GOTO function is not exposed. *)
         simple_function
