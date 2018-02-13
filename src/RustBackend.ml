@@ -35,8 +35,11 @@ let parser_enums () =
             [])
     in
 
+    (* We add a variant for error to YYType even though it's not an actual token
+     * in order to have a way to construct a dummy yylval. *)
     [IEnum (true, "Token", terminals) ;
-     IEnum (true, "YYType", terminals @ nonterminals)]
+     IEnum (true, "YYType", Terminal.(print error, rust_type @@ ocamltype error) ::
+                            terminals @ nonterminals)]
 
 (* The type of actions (entries in the ACTION table)
  * There is no Accept action, we consider reduction by a start production as an
@@ -141,7 +144,7 @@ let parser_tables () =
     (* Compress the ACTION and GOTO tables. *)
     (compress Err (Terminal.n) parse_table,
      compress 0 (Nonterminal.n) goto_table,
-     error, default_table)  
+     error, default_table)
 
 (* Create an IL const or static declaration from a table. *)
 let encode_table name table ty encode_elem =
@@ -229,6 +232,10 @@ let parser_type () =
                     (* false => ACTION_TABLE[(disp[st] + tok as isize) as usize] *)
                     compressed_index "ACTION_TABLE" (EVar "state") (EVar "tok")
                 )) ;
+
+            simple_function "error_value"
+                [] (TVar "YYType")
+                (EVariant (["YYType"; Terminal.(print error)], [])) ;
 
             simple_function "default_reduction"
                 [(PVar "state", TUsize)] defred_ty

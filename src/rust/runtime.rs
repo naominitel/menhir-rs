@@ -241,6 +241,10 @@ pub trait LRParser {
     type State: Copy;
     type YYType;
 
+    // Mainly used as a dummy semantic value.
+    // Should be obsolete once we have union stacks.
+    fn error_value() -> Self::YYType;
+
     fn default_reduction(state: Self::State)
                          -> Option<Option<SemAct<Self::YYType, Self::State>>>;
     fn action(state: Self::State, token: Self::Terminal)
@@ -278,6 +282,7 @@ pub trait EntryPoint<Parser: LRParser> {
     fn new<Lexer>() -> ParserState<Lexer, Parser, Self>
         where Lexer: self::Lexer,
               Lexer::Location: Clone,
+              Lexer::Location: Default,
               Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
               Self: ::std::marker::Sized {
         ParserState::<Lexer, Parser, Self>::new()
@@ -311,6 +316,7 @@ pub trait EntryPoint<Parser: LRParser> {
         where Lexer: self::Lexer,
               Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
               Lexer::Location: Clone,
+              Lexer::Location: Default,
               Parser: LRParser,
               Self: ::std::marker::Sized {
         let state = Self::new();
@@ -428,8 +434,7 @@ enum Checkpoint<Lexer, Parser, Entry>
 // Several functions that each run a single step of the parsing process.
 // They contain the actual logic of the LR loop.
 // This interface is unsafe for now because some functions will leave the parser
-// in an invalid state and cause undefined behaviour if they are not called in
-// the right order.
+// in an invalid state if they are not called in the right order.
 // For this reason, they are not exposed but only used to implement the standard
 // monolithic interface.
 // We will make the incremental interface public once we add some kind of
@@ -438,20 +443,21 @@ impl<Lexer, Parser, Entry> ParserState<Lexer, Parser, Entry>
     where Parser: LRParser,
           Lexer: self::Lexer,
           Lexer::Location: Clone,
+          Lexer::Location: Default,
           Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
           Entry: EntryPoint<Parser> {
 
     fn new() -> ParserState<Lexer, Parser, Entry> {
         use std::mem::uninitialized;
-        unsafe { ParserState {
+        ParserState {
             state: Entry::initial(),
             stack: Vec::new(),
-            yylval: uninitialized(),
-            lookahead: uninitialized(),
-            location: uninitialized(),
+            yylval: Parser::error_value(),
+            lookahead: Parser::error(),
+            location: Lexer::Location::default(),
             entry: ::std::marker::PhantomData,
             error: None
-        }}
+        }
     }
 
     // Start the parsing process: we need lookahead. Stop and ask for input.
@@ -469,11 +475,7 @@ impl<Lexer, Parser, Entry> ParserState<Lexer, Parser, Entry>
     fn discard(mut self, loc: Lexer::Location, tok: Lexer::Token)
                -> Checkpoint<Lexer, Parser, Entry> {
         let (yylval, tok) = tok.into();
-        // Here yylval cannot contain a valid object, don't call dtor.
-        unsafe {
-            let val = ::std::mem::replace(&mut self.yylval, yylval);
-            ::std::mem::forget(val);
-        }
+        let val = ::std::mem::replace(&mut self.yylval, yylval);
         self.lookahead = tok;
         self.location = loc;
         self.error = None;
@@ -516,8 +518,7 @@ impl<Lexer, Parser, Entry> ParserState<Lexer, Parser, Entry>
     fn shift(mut self, shift: Parser::State)
              -> Checkpoint<Lexer, Parser, Entry> {
         self.stack.push((self.state, self.yylval));
-        // Here yylval has been moved so this is ok.
-        self.yylval = unsafe { ::std::mem::uninitialized() };
+        self.yylval = Parser::error_value();
         self.state = shift;
         Checkpoint::Shifting(self, shift)
     }
@@ -592,16 +593,10 @@ impl<Lexer, Parser, Entry> ParserState<Lexer, Parser, Entry>
             }
         }
     }
-}
 
-// Implements the monolithic interface in terms of the incremental interface,
-// with the default error handling strategy.
-impl<Lexer, Parser, Entry> ParserState<Lexer, Parser, Entry>
-    where Parser: LRParser,
-          Lexer: self::Lexer,
-          Lexer::Token: Into<(Parser::YYType, Parser::Terminal)>,
-          Lexer::Location: Clone,
-          Entry: EntryPoint<Parser> {
+    // Implements the monolithic interface in terms of the incremental interface,
+    // with the default error handling strategy.
+
     /// Run the parsing process until success or failure.
     ///
     /// This function actually implements the [`EntryPoint::run`] function in
